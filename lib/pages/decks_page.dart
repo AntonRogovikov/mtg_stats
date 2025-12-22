@@ -10,17 +10,18 @@ class DeckListPage extends StatefulWidget {
 
 class _DeckListPageState extends State<DeckListPage> {
   // Пример данных для списка колод
-  final List<Map<String, dynamic>> decks = const [
-    {'name': 'Тестовая колода 1'},
-    {'name': 'Тестовая колода 2'},
-    {'name': 'Тестовая колода 3'},
-    {'name': 'Тестовая колода 4'},
-    {'name': 'Тестовая колода 5'},
-    {'name': 'Тестовая колода 6'},
+  List<Map<String, dynamic>> decks = const [
+    {'name': 'Вампиры'},
+    {'name': 'Ниндзя'},
+    {'name': 'Саурон'},
+    {'name': 'Легендарки'},
+    {'name': 'Пятицветка'},
+    {'name': 'Шрайны'},
   ];
   int _firstDiceValue = 1;
   int _secondDiceValue = 1;
   bool _isRolling = false;
+  int? _selectedDeckIndex; // Индекс выбранной колоды
 
   // Два разных генератора
   final Random _fastRandom = Random(); // Для анимации (быстрый)
@@ -56,6 +57,7 @@ class _DeckListPageState extends State<DeckListPage> {
 
     setState(() {
       _isRolling = true;
+      _selectedDeckIndex = null; // Сбрасываем выбор колоды
     });
 
     // Эффект броска с несколькими изменениями
@@ -100,9 +102,11 @@ class _DeckListPageState extends State<DeckListPage> {
         Future.delayed(Duration(milliseconds: 30), () {
           setState(() {
             // Бросаем второй кубик с тем же secure random
-            // но время изменилось, так что результат будет другим
             _secondDiceValue = _secureRandom!.nextInt(20) + 1;
             _isRolling = false;
+
+            // После броска вычисляем выбранную колоду
+            _calculateSelectedDeck();
           });
         });
       } else {
@@ -111,7 +115,54 @@ class _DeckListPageState extends State<DeckListPage> {
           _firstDiceValue = _fastRandom.nextInt(20) + 1;
           _secondDiceValue = _fastRandom.nextInt(20) + 1;
           _isRolling = false;
+          _calculateSelectedDeck(); // Вычисляем выбранную колоду
         });
+      }
+    });
+  }
+
+  // Метод для вычисления выбранной колоды по сумме кубиков
+  void _calculateSelectedDeck() {
+    final sum = _firstDiceValue + _secondDiceValue;
+
+    if (decks.isNotEmpty) {
+      // Циклический расчет: (сумма - 1) % количество_колод
+      // -1 потому что индексы начинаются с 0
+      int index = (sum - 1) % decks.length;
+
+      setState(() {
+        _selectedDeckIndex = index;
+      });
+    }
+  }
+
+  // Метод для перемешивания колод
+  void _shuffleDecks() {
+    if (!_secureInitialized) return;
+
+    setState(() {
+      // Используем secure random для перемешивания
+      if (_secureRandom != null) {
+        // Создаем копию списка и перемешиваем
+        List<Map<String, dynamic>> shuffledDecks = List.from(decks);
+
+        // Алгоритм Фишера-Йетса (правильное перемешивание)
+        for (int i = shuffledDecks.length - 1; i > 0; i--) {
+          // Используем secure random для выбора случайного индекса
+          int j = _secureRandom!.nextInt(i + 1);
+
+          // Меняем местами элементы
+          Map<String, dynamic> temp = shuffledDecks[i];
+          shuffledDecks[i] = shuffledDecks[j];
+          shuffledDecks[j] = temp;
+        }
+
+        decks = shuffledDecks;
+        _selectedDeckIndex = null; // Сбрасываем выбор при перемешивании
+      } else {
+        // Fallback с обычным random
+        decks.shuffle(_fastRandom);
+        _selectedDeckIndex = null;
       }
     });
   }
@@ -127,7 +178,14 @@ class _DeckListPageState extends State<DeckListPage> {
         backgroundColor: Colors.blueGrey[900],
         elevation: 4,
       ),
-      body: Column(children: [_buildDiceSection(), _buildDecksGrid()]),
+      body: Column(
+        children: [
+          _buildDiceSection(),
+          _buildDecksHeader(),
+          _buildDecksGrid(),
+          _buildSelectionInfo(),
+        ],
+      ),
     );
   }
 
@@ -146,7 +204,6 @@ class _DeckListPageState extends State<DeckListPage> {
               _diceDisplay('Кубик 2', _secondDiceValue),
             ],
           ),
-          // Отступ
           SizedBox(height: 20),
           // Сумма кубиков
           _buildSumDisplay(),
@@ -262,33 +319,172 @@ class _DeckListPageState extends State<DeckListPage> {
   }
 
   // Экран со списком колод
+  Widget _buildDecksHeader() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey[300]!, width: 1)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Информация о количестве колод
+          Text(
+            'Всего колод: ${decks.length}',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.blueGrey[900],
+            ),
+          ),
+          // Кнопка перемешивания
+          ElevatedButton.icon(
+            onPressed: (_secureInitialized && !_isRolling)
+                ? _shuffleDecks
+                : null,
+            icon: Icon(Icons.shuffle, size: 20),
+            label: Text('Перемешать'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _isRolling
+                  ? Colors.grey[400]
+                  : Colors.amber[700],
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDecksGrid() {
     return Padding(
       padding: const EdgeInsets.all(20.0),
       child: Wrap(
         spacing: 20,
         runSpacing: 20,
-        children: decks.map((deck) {
-          return _cube(deck['name']);
+        children: decks.asMap().entries.map((entry) {
+          int index = entry.key;
+          var deck = entry.value;
+          return _cube(deck['name'], index);
         }).toList(),
       ),
     );
   }
 
-  Widget _cube(String name) {
-    return Container(
-      width: 100,
-      height: 100,
-      decoration: BoxDecoration(
-        color: Colors.amber,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Center(
-        child: Text(
-          name,
-          style: const TextStyle(color: Colors.white),
-          textAlign: TextAlign.center,
+  Widget _cube(String name, int index) {
+    final bool isSelected = index == _selectedDeckIndex;
+
+    return GestureDetector(
+      onTap: () {
+        // Можно добавить возможность выбрать колоду вручную
+        setState(() {
+          _selectedDeckIndex = index;
+        });
+      },
+      child: Card(
+        elevation: isSelected ? 8 : 3,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+          side: BorderSide(
+            color: isSelected ? Colors.blue : Colors.transparent,
+            width: isSelected ? 3 : 0,
+          ),
         ),
+        child: Container(
+          width: 100,
+          height: 140,
+          decoration: BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage('assets/images/back_card.jpg'),
+              fit: BoxFit.fill,
+            ),
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.blue.withOpacity(0.5),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    ),
+                  ]
+                : [],
+          ),
+          child: Stack(
+            children: [
+              Center(
+                child: Text(
+                  name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              if (isSelected)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.check, color: Colors.white, size: 16),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Виджет с информацией о выборе колоды
+  Widget _buildSelectionInfo() {
+    if (_selectedDeckIndex == null) return SizedBox.shrink();
+
+    final deckName = decks[_selectedDeckIndex!]['name'];
+
+    return Container(
+      padding: EdgeInsets.all(16),
+      margin: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.green[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.auto_awesome, color: Colors.green[800]),
+          SizedBox(width: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                'Выбрана колода:',
+                style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+              ),
+              SizedBox(width: 10),
+              Text(
+                '«$deckName»',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green[900],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
