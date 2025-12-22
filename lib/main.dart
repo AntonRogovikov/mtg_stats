@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
+import 'pages/decks_page.dart';
+import 'pages/home_page.dart';
 
 void main() {
-  runApp(const MainApp());
+  runApp(MyApp());
 }
-
-class MainApp extends StatelessWidget {
-  const MainApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Text('Hello Anton!'),
-        ),
-      ),
+    return MaterialApp(
+      home: HomePage(),
+      routes: {'/decks': (context) => DeckListPage()},
     );
   }
 }
