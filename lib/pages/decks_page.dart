@@ -22,6 +22,7 @@ class _DeckListPageState extends State<DeckListPage> {
   int _secondDiceValue = 1;
   bool _isRolling = false;
   int? _selectedDeckIndex; // Индекс выбранной колоды
+  final TextEditingController _manualSumController = TextEditingController();
 
   // Два разных генератора
   final Random _fastRandom = Random(); // Для анимации (быстрый)
@@ -32,6 +33,12 @@ class _DeckListPageState extends State<DeckListPage> {
   void initState() {
     super.initState();
     _initializeSecureRandom();
+  }
+
+  @override
+  void dispose() {
+    _manualSumController.dispose();
+    super.dispose();
   }
 
   Future<void> _initializeSecureRandom() async {
@@ -124,7 +131,11 @@ class _DeckListPageState extends State<DeckListPage> {
   // Метод для вычисления выбранной колоды по сумме кубиков
   void _calculateSelectedDeck() {
     final sum = _firstDiceValue + _secondDiceValue;
+    _selectDeckBySum(sum);
+  }
 
+  // Метод для выбора колоды по сумме
+  void _selectDeckBySum(int sum) {
     if (decks.isNotEmpty) {
       // Циклический расчет: (сумма - 1) % количество_колод
       // -1 потому что индексы начинаются с 0
@@ -133,6 +144,115 @@ class _DeckListPageState extends State<DeckListPage> {
       setState(() {
         _selectedDeckIndex = index;
       });
+    }
+  }
+
+  // Метод для ручного ввода суммы
+  void _manualSumInput() {
+    String? errorText;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Введите сумму'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Диапазон: от 2 до 40'),
+                  SizedBox(height: 10),
+                  TextField(
+                    controller: _manualSumController,
+                    keyboardType: TextInputType.number,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: 'Число от 2 до 40',
+                      border: OutlineInputBorder(),
+                      errorText: errorText,
+                    ),
+                    onChanged: (value) {
+                      if (value.isNotEmpty) {
+                        try {
+                          final sum = int.parse(value);
+                          if (sum < 2 || sum > 40) {
+                            setState(() {
+                              errorText = 'Допустимый диапазон: 2-40';
+                            });
+                          } else {
+                            setState(() {
+                              errorText = null;
+                            });
+                          }
+                        } catch (e) {
+                          setState(() {
+                            errorText = 'Введите целое число';
+                          });
+                        }
+                      } else {
+                        setState(() {
+                          errorText = null;
+                        });
+                      }
+                    },
+                    onSubmitted: (value) {
+                      if (errorText == null && value.isNotEmpty) {
+                        _processManualInput();
+                        Navigator.of(context).pop();
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: Text('Отмена'),
+                ),
+                TextButton(
+                  onPressed:
+                      errorText == null && _manualSumController.text.isNotEmpty
+                      ? () {
+                          _processManualInput();
+                          Navigator.of(context).pop();
+                        }
+                      : null,
+                  child: Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Обработка ручного ввода
+  void _processManualInput() {
+    final text = _manualSumController.text;
+    if (text.isNotEmpty) {
+      try {
+        final sum = int.parse(text);
+        // Проверка диапазона
+        if (sum >= 2 && sum <= 40) {
+          // Обновляем значения кубиков для отображения (произвольное разбиение)
+          setState(() {
+            _firstDiceValue = min(20, sum ~/ 2);
+            _secondDiceValue = sum - _firstDiceValue;
+            if (_secondDiceValue > 20) {
+              _secondDiceValue = 20;
+              _firstDiceValue = sum - 20;
+            }
+            _selectedDeckIndex = null;
+            _selectDeckBySum(sum);
+          });
+        }
+      } catch (e) {
+        // Некорректный ввод - игнорируем
+      }
     }
   }
 
@@ -198,9 +318,10 @@ class _DeckListPageState extends State<DeckListPage> {
         children: [
           // Два кубика
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _diceDisplay('Кубик 1', _firstDiceValue),
+              SizedBox(width: 20),
               _diceDisplay('Кубик 2', _secondDiceValue),
             ],
           ),
@@ -208,7 +329,7 @@ class _DeckListPageState extends State<DeckListPage> {
           // Сумма кубиков
           _buildSumDisplay(),
           SizedBox(height: 10),
-          _buildRollButton(),
+          _buildControlButtons(),
         ],
       ),
     );
@@ -288,33 +409,55 @@ class _DeckListPageState extends State<DeckListPage> {
     );
   }
 
-  Widget _buildRollButton() {
-    return ConstrainedBox(
-      constraints: BoxConstraints(minWidth: 200, minHeight: 56),
-      child: ElevatedButton(
-        onPressed: _isRolling ? null : _rollDice,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _isRolling ? Colors.grey : Colors.deepPurple,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+  Widget _buildControlButtons() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        ConstrainedBox(
+          constraints: BoxConstraints(minWidth: 200, minHeight: 56),
+          child: ElevatedButton(
+            onPressed: _isRolling ? null : _rollDice,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _isRolling ? Colors.grey : Colors.deepPurple,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 4,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              child: _isRolling
+                  ? SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 3,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : Text('Бросить кубики', style: TextStyle(fontSize: 20)),
+            ),
           ),
-          elevation: 4,
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-          child: _isRolling
-              ? SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 3,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : Text('Бросить кубики', style: TextStyle(fontSize: 20)),
+        SizedBox(width: 10),
+        // Кнопка ручного ввода (маленькая)
+        ConstrainedBox(
+          constraints: BoxConstraints(minWidth: 0, minHeight: 56),
+          child: ElevatedButton(
+            onPressed: _isRolling ? null : _manualSumInput,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber[700],
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            child: Icon(Icons.edit, size: 20),
+          ),
         ),
-      ),
+      ],
     );
   }
 
