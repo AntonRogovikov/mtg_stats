@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
-import '../models/deck.dart'; // Импортируем модель
+import '../models/deck.dart';
+import '../database/firebase_database_helper.dart';
 
 class DeckListPage extends StatefulWidget {
   const DeckListPage({super.key});
@@ -10,36 +11,126 @@ class DeckListPage extends StatefulWidget {
 }
 
 class _DeckListPageState extends State<DeckListPage> {
-  // Используем модель Deck вместо Map
-  List<Deck> decks = [
-    Deck(name: 'Вампиры'),
-    Deck(name: 'Ниндзя'),
-    Deck(name: 'Саурон'),
-    Deck(name: 'Легендарки'),
-    Deck(name: 'Пятицветка'),
-    Deck(name: 'Шрайны'),
-  ];
-
+  List<Deck> decks = [];
   int _firstDiceValue = 1;
   int _secondDiceValue = 1;
   bool _isRolling = false;
   int? _selectedDeckIndex;
   final TextEditingController _manualSumController = TextEditingController();
-
   final Random _fastRandom = Random();
   Random? _secureRandom;
   bool _secureInitialized = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _initializeSecureRandom();
+    _loadDecksFromFirebase();
   }
 
   @override
   void dispose() {
     _manualSumController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadDecksFromFirebase() async {
+    try {
+      final loadedDecks = await FirebaseDatabaseHelper.instance.getAllDecks();
+      setState(() {
+        decks = loadedDecks;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Ошибка загрузки колод: $e');
+      setState(() {
+        decks = [];
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _addDeckDialog() {
+    final TextEditingController nameController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Новая колода'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Введите название колоды',
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: (value) {
+                  if (value.trim().isNotEmpty) {
+                    _addDeckToFirebase(value.trim());
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                if (name.isNotEmpty) {
+                  _addDeckToFirebase(name);
+                  Navigator.of(context).pop();
+                }
+              },
+              child: Text('Добавить'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _addDeckToFirebase(String name) async {
+    try {
+      await FirebaseDatabaseHelper.instance.insertDeck(name);
+      await _loadDecksFromFirebase();
+    } catch (e) {
+      print('Ошибка добавления колоды: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ошибка при добавлении колоды'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _shuffleDecks() {
+    if (!_secureInitialized) return;
+
+    setState(() {
+      if (_secureRandom != null) {
+        for (int i = decks.length - 1; i > 0; i--) {
+          int j = _secureRandom!.nextInt(i + 1);
+          Deck temp = decks[i];
+          decks[i] = decks[j];
+          decks[j] = temp;
+        }
+        _selectedDeckIndex = null;
+      } else {
+        decks.shuffle(_fastRandom);
+        _selectedDeckIndex = null;
+      }
+    });
   }
 
   Future<void> _initializeSecureRandom() async {
@@ -229,24 +320,112 @@ class _DeckListPageState extends State<DeckListPage> {
     }
   }
 
-  void _shuffleDecks() {
-    if (!_secureInitialized) return;
+  // Редактирование колоды по долгому нажатию
+  void _showEditDeckDialog(Deck deck) {
+    final TextEditingController nameController = TextEditingController(
+      text: deck.name,
+    );
 
-    setState(() {
-      if (_secureRandom != null) {
-        // Используем алгоритм Фишера-Йетса для списка Deck
-        for (int i = decks.length - 1; i > 0; i--) {
-          int j = _secureRandom!.nextInt(i + 1);
-          Deck temp = decks[i];
-          decks[i] = decks[j];
-          decks[j] = temp;
-        }
-        _selectedDeckIndex = null;
-      } else {
-        decks.shuffle(_fastRandom);
-        _selectedDeckIndex = null;
-      }
-    });
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Редактировать колоду'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Введите новое название',
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: (value) {
+                  if (value.trim().isNotEmpty && value != deck.name) {
+                    _updateDeckInFirebase(deck.id!, value.trim());
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () {
+                final newName = nameController.text.trim();
+                if (newName.isNotEmpty && newName != deck.name) {
+                  _updateDeckInFirebase(deck.id!, newName);
+                  Navigator.of(context).pop();
+                }
+              },
+              child: Text('Сохранить'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _updateDeckInFirebase(String deckId, String newName) async {
+    try {
+      await FirebaseDatabaseHelper.instance.updateDeck(deckId, newName);
+      await _loadDecksFromFirebase();
+    } catch (e) {
+      print('Ошибка обновления колоды: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ошибка при обновлении колоды'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _showDeleteDeckDialog(Deck deck) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Удалить колоду'),
+          content: Text(
+            'Вы уверены, что хотите удалить колоду "${deck.name}"?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () {
+                _deleteDeckFromFirebase(deck.id!);
+                Navigator.of(context).pop();
+              },
+              child: Text('Удалить', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteDeckFromFirebase(String deckId) async {
+    try {
+      await FirebaseDatabaseHelper.instance.deleteDeck(deckId);
+      await _loadDecksFromFirebase();
+    } catch (e) {
+      print('Ошибка удаления колоды: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ошибка при удалении колоды'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -260,12 +439,68 @@ class _DeckListPageState extends State<DeckListPage> {
         backgroundColor: Colors.blueGrey[900],
         elevation: 4,
       ),
-      body: Column(
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addDeckDialog,
+        backgroundColor: Colors.deepPurple,
+        child: Icon(Icons.add, color: Colors.white),
+      ),
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                _buildDiceSection(),
+                _buildDecksHeader(),
+                decks.isEmpty
+                    ? Expanded(
+                        child: Center(
+                          child: Text(
+                            'Нет колод. Нажмите + чтобы добавить',
+                            style: TextStyle(fontSize: 18, color: Colors.grey),
+                          ),
+                        ),
+                      )
+                    : _buildDecksGrid(),
+                _buildSelectionInfo(),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildDecksHeader() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey[300]!, width: 1)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _buildDiceSection(),
-          _buildDecksHeader(),
-          _buildDecksGrid(),
-          _buildSelectionInfo(),
+          Text(
+            'Всего колод: ${decks.length}',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.blueGrey[900],
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: (_secureInitialized && !_isRolling)
+                ? _shuffleDecks
+                : null,
+            icon: Icon(Icons.shuffle, size: 20),
+            label: Text('Перемешать'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _isRolling
+                  ? Colors.grey[400]
+                  : Colors.amber[700],
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+          ),
         ],
       ),
     );
@@ -419,46 +654,6 @@ class _DeckListPageState extends State<DeckListPage> {
     );
   }
 
-  Widget _buildDecksHeader() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey[300]!, width: 1)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            'Всего колод: ${decks.length}',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.blueGrey[900],
-            ),
-          ),
-          ElevatedButton.icon(
-            onPressed: (_secureInitialized && !_isRolling)
-                ? _shuffleDecks
-                : null,
-            icon: Icon(Icons.shuffle, size: 20),
-            label: Text('Перемешать'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _isRolling
-                  ? Colors.grey[400]
-                  : Colors.amber[700],
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildDecksGrid() {
     return Padding(
       padding: const EdgeInsets.all(20.0),
@@ -468,16 +663,13 @@ class _DeckListPageState extends State<DeckListPage> {
         children: decks.asMap().entries.map((entry) {
           int index = entry.key;
           Deck deck = entry.value;
-          return _cube(
-            deck.name,
-            index,
-          ); // Используем deck.name вместо deck['name']
+          return _cube(deck, index);
         }).toList(),
       ),
     );
   }
 
-  Widget _cube(String name, int index) {
+  Widget _cube(Deck deck, int index) {
     final bool isSelected = index == _selectedDeckIndex;
 
     return GestureDetector(
@@ -485,6 +677,9 @@ class _DeckListPageState extends State<DeckListPage> {
         setState(() {
           _selectedDeckIndex = index;
         });
+      },
+      onLongPress: () {
+        _showDeckOptions(deck);
       },
       child: Card(
         elevation: isSelected ? 8 : 3,
@@ -507,7 +702,7 @@ class _DeckListPageState extends State<DeckListPage> {
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: Colors.blue.withOpacity(0.5),
+                      color: Color.fromRGBO(33, 150, 243, 0.5),
                       blurRadius: 10,
                       spreadRadius: 2,
                     ),
@@ -518,7 +713,7 @@ class _DeckListPageState extends State<DeckListPage> {
             children: [
               Center(
                 child: Text(
-                  name,
+                  deck.name,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -547,10 +742,48 @@ class _DeckListPageState extends State<DeckListPage> {
     );
   }
 
-  Widget _buildSelectionInfo() {
-    if (_selectedDeckIndex == null) return SizedBox.shrink();
+  void _showDeckOptions(Deck deck) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.edit, color: Colors.blue),
+                title: Text('Редактировать "${deck.name}"'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showEditDeckDialog(deck);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.delete, color: Colors.red),
+                title: Text('Удалить "${deck.name}"'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showDeleteDeckDialog(deck);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.close),
+                title: Text('Отмена'),
+                onTap: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
-    final deckName = decks[_selectedDeckIndex!].name; // Используем deck.name
+  Widget _buildSelectionInfo() {
+    if (_selectedDeckIndex == null || _selectedDeckIndex! >= decks.length) {
+      return SizedBox.shrink();
+    }
+
+    final deckName = decks[_selectedDeckIndex!].name;
 
     return Container(
       padding: EdgeInsets.all(16),

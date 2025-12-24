@@ -1,21 +1,33 @@
-// models/deck.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Deck {
+  String? id;
   String name;
+  DateTime createdAt;
+  DateTime? updatedAt; // Добавляем поле для отслеживания обновлений
 
-  Deck({required this.name});
+  Deck({this.id, required this.name, DateTime? createdAt, this.updatedAt})
+    : createdAt = createdAt ?? DateTime.now();
 
-  // Для работы с вашим существующим кодом
+  factory Deck.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Deck(
+      id: doc.id,
+      name: data['name'] ?? 'Без названия',
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+    );
+  }
+
   Map<String, dynamic> toMap() {
-    return {'name': name};
+    final map = {'name': name, 'createdAt': Timestamp.fromDate(createdAt)};
+
+    if (updatedAt != null) {
+      map['updatedAt'] = Timestamp.fromDate(updatedAt!);
+    }
+
+    return map;
   }
 
-  // Для создания из Map (если нужно)
-  factory Deck.fromMap(Map<String, dynamic> map) {
-    return Deck(name: map['name']);
-  }
-
-  @override
-  String toString() {
-    return name;
-  }
+  // ... остальные методы без изменений
 }
