@@ -3,7 +3,7 @@ name: Deploy Flutter Web to GitHub Pages
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:  # Позволяет запускать вручную
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -22,19 +22,31 @@ jobs:
       uses: subosito/flutter-action@v2
       with:
         channel: 'stable'
-        # Если нужно указать конкретную версию:
-        # flutter-version: '3.22.0'
+        # Укажите конкретную версию для стабильности
+        flutter-version: '3.22.0'
     
     - name: Install dependencies
       run: |
         flutter pub get
     
+    - name: Enable web
+      run: flutter config --enable-web
+    
     - name: Build Flutter Web
       run: |
-        # Убрали --web-renderer, используем только нужные флаги
-        flutter build web --release --base-href /mtg-stats/
-        # Если репозиторий называется username.github.io (персональный сайт):
-        # flutter build web --release --base-href /
+        # Убедитесь что base-href соответствует имени репозитория
+        flutter clean
+        flutter build web \
+          --release \
+          --base-href /mtg_stats/ \
+          --verbose
+    
+    - name: Debug - Check build output
+      run: |
+        echo "=== Checking build/web ==="
+        find ./build/web -type f -name "*.js" | head -5
+        echo "=== First 5 lines of index.html ==="
+        head -5 ./build/web/index.html
     
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
