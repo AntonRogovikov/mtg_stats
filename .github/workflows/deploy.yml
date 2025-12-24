@@ -22,31 +22,44 @@ jobs:
       uses: subosito/flutter-action@v2
       with:
         channel: 'stable'
-        # Укажите конкретную версию для стабильности
-        flutter-version: '3.22.0'
+        flutter-version: '3.22.0'  # Нужна версия, совместимая с Firebase Dart SDK
+    
+    - name: Debug - Show versions
+      run: |
+        flutter --version
+        dart --version
+        echo "Node version: $(node --version)"
     
     - name: Install dependencies
       run: |
         flutter pub get
     
-    - name: Enable web
-      run: flutter config --enable-web
+    - name: Fix base href in index.html
+      run: |
+        # Принудительно заменяем $FLUTTER_BASE_HREF на правильный путь
+        sed -i 's|\$FLUTTER_BASE_HREF|/mtg_stats/|g' ./web/index.html
+        echo "Base href после замены:"
+        grep "base href" ./web/index.html
     
     - name: Build Flutter Web
       run: |
-        # Убедитесь что base-href соответствует имени репозитория
-        flutter clean
+        echo "🔄 Building Flutter Web..."
         flutter build web \
           --release \
           --base-href /mtg_stats/ \
-          --verbose
+          --dart-define=FLUTTER_WEB_CANVASKIT_URL=/mtg_stats/canvaskit/ \
+          --verbose 2>&1 | tail -50
     
     - name: Debug - Check build output
       run: |
-        echo "=== Checking build/web ==="
-        find ./build/web -type f -name "*.js" | head -5
-        echo "=== First 5 lines of index.html ==="
-        head -5 ./build/web/index.html
+        echo "📁 Содержимое build/web:"
+        ls -la ./build/web/
+        echo ""
+        echo "📄 Первые 10 строк index.html:"
+        head -10 ./build/web/index.html
+        echo ""
+        echo "📦 Размер main.dart.js:"
+        ls -lh ./build/web/main.dart.js || echo "❌ main.dart.js не найден!"
     
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
