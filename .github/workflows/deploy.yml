@@ -23,7 +23,7 @@ jobs:
       with:
         channel: 'stable'
         # ВАЖНО: Указываем более новую версию Flutter
-        flutter-version: '3.22.0'  # Эта версия содержит Dart 3.7.0+
+        flutter-version: '3.38.5'  # Эта версия содержит Dart 3.7.0+
     
     - name: Show versions for debug
       run: |
