@@ -1,51 +1,182 @@
-- name: Debug - Check project structure
-  run: |
-    echo "=== Project structure before build ==="
-    pwd
-    ls -la
-    echo "=== web/ directory ==="
-    ls -la web/ || echo "No web/ directory"
-    echo "=== pubspec.yaml ==="
-    head -20 pubspec.yaml
+name: Deploy Flutter Web to GitHub Pages
 
-- name: Build Flutter Web
-  run: |
-    echo "🏗️ Building Flutter Web..."
-    # Сначала попробуем создать web платформу
-    flutter create --platforms=web .
-    
-    echo "=== Starting build ==="
-    # Запускаем сборку и сохраняем полный лог
-    flutter build web \
-      --release \
-      --base-href /mtg_stats/ 2>&1 | tee build_log.txt
-    
-    # Проверяем код завершения
-    BUILD_EXIT_CODE=$?
-    echo "Build exit code: $BUILD_EXIT_CODE"
-    
-    if [ $BUILD_EXIT_CODE -ne 0 ]; then
-      echo "❌ Build failed! Last 50 lines of log:"
-      tail -50 build_log.txt
-      exit 1
-    fi
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
-- name: Check build output
-  run: |
-    echo "📁 Build directory content:"
-    # Сначала проверяем существует ли папка
-    if [ -d "build/web" ]; then
-      ls -la build/web/
-      echo ""
-      if [ -f "build/web/main.dart.js" ]; then
-        echo "✅ main.dart.js found! Size: $(du -h build/web/main.dart.js | cut -f1)"
-      else
-        echo "❌ main.dart.js NOT FOUND in build/web!"
-        echo "Files in build/web:"
-        find build/web -type f | head -20
-      fi
-    else
-      echo "❌ build/web directory does not exist!"
-      echo "Checking build directory:"
-      ls -la build/ 2>/dev/null || echo "No build directory at all"
-    fi
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: 'stable'
+        flutter-version: '3.38.5'
+    
+    - name: Show versions for debug
+      run: |
+        echo "=== Installed versions ==="
+        flutter --version
+        dart --version
+        echo ""
+    
+    - name: Enable web platform
+      run: |
+        echo "🔄 Enabling web platform..."
+        flutter config --enable-web
+        # Создаем web платформу если её нет
+        if [ ! -d "web" ]; then
+          echo "Creating web platform..."
+          flutter create --platforms=web .
+        else
+          echo "Web platform already exists"
+        fi
+    
+    - name: Debug - Check project structure
+      run: |
+        echo "=== Project structure ==="
+        pwd
+        ls -la
+        echo ""
+        echo "=== web/ directory ==="
+        ls -la web/
+        echo ""
+        echo "=== lib/ directory ==="
+        ls -la lib/
+        echo ""
+        echo "=== pubspec.yaml (first 30 lines) ==="
+        head -30 pubspec.yaml
+    
+    - name: Install dependencies
+      run: |
+        echo "🔄 Installing dependencies..."
+        # Очищаем и устанавливаем заново
+        rm -f pubspec.lock
+        flutter clean
+        flutter pub get --verbose 2>&1 | tail -50
+    
+    - name: Fix base href
+      run: |
+        echo "🔧 Fixing base href..."
+        if [ -f "web/index.html" ]; then
+          # Создаем backup
+          cp web/index.html web/index.html.backup
+          # Заменяем base href
+          sed -i 's|<base href="\$FLUTTER_BASE_HREF">|<base href="/mtg_stats/">|g' web/index.html
+          echo "✅ Base href fixed:"
+          grep "base href" web/index.html
+        else
+          echo "❌ web/index.html not found! Creating basic one..."
+          cat > web/index.html << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="/mtg_stats/">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MTG Stats</title>
+</head>
+<body>
+  <script src="flutter.js" defer></script>
+  <script src="main.dart.js" type="application/javascript"></script>
+</body>
+</html>
+EOF
+          echo "✅ Created basic index.html"
+        fi
+    
+    - name: Build Flutter Web
+      run: |
+        echo "🏗️ Building Flutter Web..."
+        echo "Command: flutter build web --release --base-href /mtg_stats/"
+        
+        # Запускаем сборку и сохраняем полный лог
+        flutter build web \
+          --release \
+          --base-href /mtg_stats/ 2>&1 | tee build_output.txt
+        
+        # Проверяем код завершения
+        BUILD_STATUS=$?
+        echo "Build exit code: $BUILD_STATUS"
+        
+        echo "=== Last 100 lines of build output ==="
+        tail -100 build_output.txt
+        
+        if [ $BUILD_STATUS -ne 0 ]; then
+          echo "❌ Build failed! Showing errors:"
+          grep -i "error\|failed\|exception\|unhandled" build_output.txt | head -20
+          echo ""
+          echo "For full log, check build_output.txt"
+          exit 1
+        fi
+        
+        echo "✅ Build completed successfully"
+    
+    - name: Check build output
+      run: |
+        echo "📁 Checking build output..."
+        
+        # Проверяем наличие папки build/web
+        if [ -d "build/web" ]; then
+          echo "✅ build/web directory exists"
+          echo "=== Files in build/web ==="
+          ls -la build/web/
+          echo ""
+          
+          # Проверяем ключевые файлы
+          if [ -f "build/web/main.dart.js" ]; then
+            echo "✅ main.dart.js found ($(du -h "build/web/main.dart.js" | cut -f1))"
+          else
+            echo "❌ main.dart.js NOT FOUND!"
+          fi
+          
+          if [ -f "build/web/index.html" ]; then
+            echo "✅ index.html found ($(du -h "build/web/index.html" | cut -f1))"
+          else
+            echo "❌ index.html NOT FOUND!"
+          fi
+          
+          if [ -f "build/web/flutter.js" ]; then
+            echo "✅ flutter.js found ($(du -h "build/web/flutter.js" | cut -f1))"
+          else
+            echo "❌ flutter.js NOT FOUND!"
+          fi
+          
+          # Показываем начало index.html
+          echo ""
+          echo "=== First 15 lines of build/web/index.html ==="
+          head -15 build/web/index.html
+          
+        else
+          echo "❌ build/web directory does NOT exist!"
+          echo "Checking if build directory exists:"
+          ls -la build/ 2>/dev/null || echo "No build directory at all"
+          exit 1
+        fi
+    
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: './build/web'
+    
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
