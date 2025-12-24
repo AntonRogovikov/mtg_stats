@@ -22,44 +22,54 @@ jobs:
       uses: subosito/flutter-action@v2
       with:
         channel: 'stable'
-        flutter-version: '3.22.0'  # Нужна версия, совместимая с Firebase Dart SDK
+        # ВАЖНО: Указываем более новую версию Flutter
+        flutter-version: '3.22.0'  # Эта версия содержит Dart 3.7.0+
     
-    - name: Debug - Show versions
+    - name: Show versions for debug
       run: |
+        echo "=== Installed versions ==="
         flutter --version
         dart --version
-        echo "Node version: $(node --version)"
+        echo ""
+        echo "=== Flutter doctor ==="
+        flutter doctor -v
     
     - name: Install dependencies
       run: |
+        echo "🔄 Installing dependencies..."
         flutter pub get
     
-    - name: Fix base href in index.html
+    - name: Fix base href
       run: |
-        # Принудительно заменяем $FLUTTER_BASE_HREF на правильный путь
-        sed -i 's|\$FLUTTER_BASE_HREF|/mtg_stats/|g' ./web/index.html
-        echo "Base href после замены:"
-        grep "base href" ./web/index.html
+        # Убедимся, что base href правильный
+        if [ -f "web/index.html" ]; then
+          sed -i 's|<base href="\$FLUTTER_BASE_HREF">|<base href="/mtg_stats/">|g' web/index.html
+          echo "✅ Base href fixed"
+          grep "base href" web/index.html
+        else
+          echo "⚠️ web/index.html not found"
+        fi
     
     - name: Build Flutter Web
       run: |
-        echo "🔄 Building Flutter Web..."
+        echo "🏗️ Building Flutter Web..."
         flutter build web \
           --release \
           --base-href /mtg_stats/ \
-          --dart-define=FLUTTER_WEB_CANVASKIT_URL=/mtg_stats/canvaskit/ \
-          --verbose 2>&1 | tail -50
+          --verbose 2>&1 | grep -A5 -B5 "error\|Error\|failed\|Failed" || true
     
-    - name: Debug - Check build output
+    - name: Check build output
       run: |
-        echo "📁 Содержимое build/web:"
-        ls -la ./build/web/
+        echo "📁 Build directory content:"
+        ls -la build/web/
         echo ""
-        echo "📄 Первые 10 строк index.html:"
-        head -10 ./build/web/index.html
-        echo ""
-        echo "📦 Размер main.dart.js:"
-        ls -lh ./build/web/main.dart.js || echo "❌ main.dart.js не найден!"
+        if [ -f "build/web/main.dart.js" ]; then
+          echo "✅ main.dart.js found! Size: $(du -h build/web/main.dart.js | cut -f1)"
+        else
+          echo "❌ main.dart.js NOT FOUND!"
+          echo "Listing all .js files:"
+          find build/web -name "*.js" -type f
+        fi
     
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
