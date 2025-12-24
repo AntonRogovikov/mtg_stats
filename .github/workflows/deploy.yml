@@ -3,36 +3,44 @@ name: Deploy Flutter Web to GitHub Pages
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:  # Позволяет запускать вручную
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
+    
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
-
+      with:
+        channel: 'stable'
+        # Если нужно указать конкретную версию:
+        # flutter-version: '3.22.0'
+    
     - name: Install dependencies
-      run: flutter pub get
-
+      run: |
+        flutter pub get
+    
     - name: Build Flutter Web
-      run: flutter build web --release --web-renderer html --base-href /mtg-stats/
-
-    - name: Setup Pages
-      uses: actions/configure-pages@v4  # Обновлено до v4
-
+      run: |
+        # Убрали --web-renderer, используем только нужные флаги
+        flutter build web --release --base-href /mtg-stats/
+        # Если репозиторий называется username.github.io (персональный сайт):
+        # flutter build web --release --base-href /
+    
     - name: Upload artifact
-      uses: actions/upload-pages-artifact@v3  # Обновлено до v3 (самая новая на данный момент)
+      uses: actions/upload-pages-artifact@v3
       with:
         path: './build/web'
-
+    
   deploy:
     environment:
       name: github-pages
@@ -42,4 +50,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4  # Обновлено до v4
+        uses: actions/deploy-pages@v4
