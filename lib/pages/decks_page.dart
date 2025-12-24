@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
+import '../models/deck.dart'; // Импортируем модель
 
 class DeckListPage extends StatefulWidget {
   const DeckListPage({super.key});
@@ -9,24 +10,24 @@ class DeckListPage extends StatefulWidget {
 }
 
 class _DeckListPageState extends State<DeckListPage> {
-  // Пример данных для списка колод
-  List<Map<String, dynamic>> decks = const [
-    {'name': 'Вампиры'},
-    {'name': 'Ниндзя'},
-    {'name': 'Саурон'},
-    {'name': 'Легендарки'},
-    {'name': 'Пятицветка'},
-    {'name': 'Шрайны'},
+  // Используем модель Deck вместо Map
+  List<Deck> decks = [
+    Deck(name: 'Вампиры'),
+    Deck(name: 'Ниндзя'),
+    Deck(name: 'Саурон'),
+    Deck(name: 'Легендарки'),
+    Deck(name: 'Пятицветка'),
+    Deck(name: 'Шрайны'),
   ];
+
   int _firstDiceValue = 1;
   int _secondDiceValue = 1;
   bool _isRolling = false;
-  int? _selectedDeckIndex; // Индекс выбранной колоды
+  int? _selectedDeckIndex;
   final TextEditingController _manualSumController = TextEditingController();
 
-  // Два разных генератора
-  final Random _fastRandom = Random(); // Для анимации (быстрый)
-  Random? _secureRandom; // Для финального результата
+  final Random _fastRandom = Random();
+  Random? _secureRandom;
   bool _secureInitialized = false;
 
   @override
@@ -43,11 +44,8 @@ class _DeckListPageState extends State<DeckListPage> {
 
   Future<void> _initializeSecureRandom() async {
     try {
-      // Инициализируем безопасный генератор заранее
-      // (это может занять немного времени)
       _secureRandom = Random.secure();
     } catch (e) {
-      // Fallback на обычный Random с хорошим seed
       int seed =
           DateTime.now().microsecondsSinceEpoch ^
           (DateTime.now().millisecond << 32);
@@ -64,10 +62,9 @@ class _DeckListPageState extends State<DeckListPage> {
 
     setState(() {
       _isRolling = true;
-      _selectedDeckIndex = null; // Сбрасываем выбор колоды
+      _selectedDeckIndex = null;
     });
 
-    // Эффект броска с несколькими изменениями
     int rolls = 0;
     const int totalRolls = 8;
     const Duration rollInterval = Duration(milliseconds: 100);
@@ -75,7 +72,6 @@ class _DeckListPageState extends State<DeckListPage> {
     void performRoll() {
       if (rolls < totalRolls) {
         setState(() {
-          // На промежуточных шагах используем быстрый Random
           _firstDiceValue = _fastRandom.nextInt(20) + 1;
           _secondDiceValue = _fastRandom.nextInt(20) + 1;
         });
@@ -83,7 +79,6 @@ class _DeckListPageState extends State<DeckListPage> {
         Future.delayed(rollInterval, performRoll);
       } else {
         setState(() {
-          // ФИНАЛЬНЫЙ ШАГ: используем Random.secure()
           _performFinalRoll();
         });
       }
@@ -93,61 +88,44 @@ class _DeckListPageState extends State<DeckListPage> {
   }
 
   void _performFinalRoll() {
-    // Для максимальной случайности на финальном броске:
-    // 1. Используем secure random
-    // 2. Миксуем несколько бросков
-    // 3. Добавляем небольшую задержку для сбора энтропии
-
     Future.delayed(Duration(milliseconds: 50), () {
       if (_secureRandom != null) {
         setState(() {
-          // Бросаем первый кубик с secure random
           _firstDiceValue = _secureRandom!.nextInt(20) + 1;
         });
 
-        // Небольшая задержка между бросками для большего расхождения
         Future.delayed(Duration(milliseconds: 30), () {
           setState(() {
-            // Бросаем второй кубик с тем же secure random
             _secondDiceValue = _secureRandom!.nextInt(20) + 1;
             _isRolling = false;
-
-            // После броска вычисляем выбранную колоду
             _calculateSelectedDeck();
           });
         });
       } else {
-        // Fallback если secure random недоступен
         setState(() {
           _firstDiceValue = _fastRandom.nextInt(20) + 1;
           _secondDiceValue = _fastRandom.nextInt(20) + 1;
           _isRolling = false;
-          _calculateSelectedDeck(); // Вычисляем выбранную колоду
+          _calculateSelectedDeck();
         });
       }
     });
   }
 
-  // Метод для вычисления выбранной колоды по сумме кубиков
   void _calculateSelectedDeck() {
     final sum = _firstDiceValue + _secondDiceValue;
     _selectDeckBySum(sum);
   }
 
-  // Метод для выбора колоды по сумме
   void _selectDeckBySum(int sum) {
     if (decks.isNotEmpty) {
-      // Циклический расчет: (сумма - 1) % количество_колод
-      // -1 потому что индексы начинаются с 0
       int index = (sum - 1) % decks.length;
-
       setState(() {
         _selectedDeckIndex = index;
       });
     }
   }
 
-  // Метод для ручного ввода суммы
   void _manualSumInput() {
     String? errorText;
 
@@ -230,15 +208,12 @@ class _DeckListPageState extends State<DeckListPage> {
     );
   }
 
-  // Обработка ручного ввода
   void _processManualInput() {
     final text = _manualSumController.text;
     if (text.isNotEmpty) {
       try {
         final sum = int.parse(text);
-        // Проверка диапазона
         if (sum >= 2 && sum <= 40) {
-          // Обновляем значения кубиков для отображения (произвольное разбиение)
           setState(() {
             _firstDiceValue = min(20, sum ~/ 2);
             _secondDiceValue = sum - _firstDiceValue;
@@ -250,37 +225,24 @@ class _DeckListPageState extends State<DeckListPage> {
             _selectDeckBySum(sum);
           });
         }
-      } catch (e) {
-        // Некорректный ввод - игнорируем
-      }
+      } catch (e) {}
     }
   }
 
-  // Метод для перемешивания колод
   void _shuffleDecks() {
     if (!_secureInitialized) return;
 
     setState(() {
-      // Используем secure random для перемешивания
       if (_secureRandom != null) {
-        // Создаем копию списка и перемешиваем
-        List<Map<String, dynamic>> shuffledDecks = List.from(decks);
-
-        // Алгоритм Фишера-Йетса (правильное перемешивание)
-        for (int i = shuffledDecks.length - 1; i > 0; i--) {
-          // Используем secure random для выбора случайного индекса
+        // Используем алгоритм Фишера-Йетса для списка Deck
+        for (int i = decks.length - 1; i > 0; i--) {
           int j = _secureRandom!.nextInt(i + 1);
-
-          // Меняем местами элементы
-          Map<String, dynamic> temp = shuffledDecks[i];
-          shuffledDecks[i] = shuffledDecks[j];
-          shuffledDecks[j] = temp;
+          Deck temp = decks[i];
+          decks[i] = decks[j];
+          decks[j] = temp;
         }
-
-        decks = shuffledDecks;
-        _selectedDeckIndex = null; // Сбрасываем выбор при перемешивании
+        _selectedDeckIndex = null;
       } else {
-        // Fallback с обычным random
         decks.shuffle(_fastRandom);
         _selectedDeckIndex = null;
       }
@@ -309,14 +271,12 @@ class _DeckListPageState extends State<DeckListPage> {
     );
   }
 
-  // Верхний экран
   Widget _buildDiceSection() {
     return Container(
       padding: const EdgeInsets.all(20),
       color: Colors.blueGrey[50],
       child: Column(
         children: [
-          // Два кубика
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -326,7 +286,6 @@ class _DeckListPageState extends State<DeckListPage> {
             ],
           ),
           SizedBox(height: 20),
-          // Сумма кубиков
           _buildSumDisplay(),
           SizedBox(height: 10),
           _buildControlButtons(),
@@ -372,7 +331,7 @@ class _DeckListPageState extends State<DeckListPage> {
               duration: Duration(milliseconds: 100),
               child: Text(
                 '$value',
-                key: ValueKey<int>(value), // Для анимации изменения цифр
+                key: ValueKey<int>(value),
                 style: TextStyle(
                   fontSize: 48,
                   fontWeight: FontWeight.bold,
@@ -441,7 +400,6 @@ class _DeckListPageState extends State<DeckListPage> {
           ),
         ),
         SizedBox(width: 10),
-        // Кнопка ручного ввода (маленькая)
         ConstrainedBox(
           constraints: BoxConstraints(minWidth: 0, minHeight: 56),
           child: ElevatedButton(
@@ -461,7 +419,6 @@ class _DeckListPageState extends State<DeckListPage> {
     );
   }
 
-  // Экран со списком колод
   Widget _buildDecksHeader() {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -472,7 +429,6 @@ class _DeckListPageState extends State<DeckListPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Информация о количестве колод
           Text(
             'Всего колод: ${decks.length}',
             style: TextStyle(
@@ -481,7 +437,6 @@ class _DeckListPageState extends State<DeckListPage> {
               color: Colors.blueGrey[900],
             ),
           ),
-          // Кнопка перемешивания
           ElevatedButton.icon(
             onPressed: (_secureInitialized && !_isRolling)
                 ? _shuffleDecks
@@ -512,8 +467,11 @@ class _DeckListPageState extends State<DeckListPage> {
         runSpacing: 20,
         children: decks.asMap().entries.map((entry) {
           int index = entry.key;
-          var deck = entry.value;
-          return _cube(deck['name'], index);
+          Deck deck = entry.value;
+          return _cube(
+            deck.name,
+            index,
+          ); // Используем deck.name вместо deck['name']
         }).toList(),
       ),
     );
@@ -524,7 +482,6 @@ class _DeckListPageState extends State<DeckListPage> {
 
     return GestureDetector(
       onTap: () {
-        // Можно добавить возможность выбрать колоду вручную
         setState(() {
           _selectedDeckIndex = index;
         });
@@ -590,11 +547,10 @@ class _DeckListPageState extends State<DeckListPage> {
     );
   }
 
-  // Виджет с информацией о выборе колоды
   Widget _buildSelectionInfo() {
     if (_selectedDeckIndex == null) return SizedBox.shrink();
 
-    final deckName = decks[_selectedDeckIndex!]['name'];
+    final deckName = decks[_selectedDeckIndex!].name; // Используем deck.name
 
     return Container(
       padding: EdgeInsets.all(16),
