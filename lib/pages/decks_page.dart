@@ -21,6 +21,7 @@ class _DeckListPageState extends State<DeckListPage> {
   Random? _secureRandom;
   bool _secureInitialized = false;
   bool _isLoading = true;
+  bool _isDiceSectionVisible = true;
 
   @override
   void initState() {
@@ -428,43 +429,60 @@ class _DeckListPageState extends State<DeckListPage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Колоды',
-          style: TextStyle(fontSize: 20, color: Colors.white),
+ @override
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      title: const Text(
+        'Колоды',
+        style: TextStyle(fontSize: 20, color: Colors.white),
+      ),
+      backgroundColor: Colors.blueGrey[900],
+      elevation: 4,
+      actions: [
+        // Кнопка скрытия/показа кубиков
+        IconButton(
+          icon: Icon(
+            _isDiceSectionVisible 
+                ? Icons.visibility_off 
+                : Icons.visibility,
+            color: Colors.white,
+          ),
+          onPressed: () {
+            setState(() {
+              _isDiceSectionVisible = !_isDiceSectionVisible;
+            });
+          },
         ),
-        backgroundColor: Colors.blueGrey[900],
-        elevation: 4,
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addDeckDialog,
-        backgroundColor: Colors.deepPurple,
-        child: Icon(Icons.add, color: Colors.white),
-      ),
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                _buildDiceSection(),
-                _buildDecksHeader(),
-                decks.isEmpty
-                    ? Expanded(
-                        child: Center(
-                          child: Text(
-                            'Нет колод. Нажмите + чтобы добавить',
-                            style: TextStyle(fontSize: 18, color: Colors.grey),
-                          ),
-                        ),
-                      )
-                    : _buildDecksGrid(),
-                _buildSelectionInfo(),
-              ],
-            ),
-    );
-  }
+      ],
+    ),
+    floatingActionButton: FloatingActionButton(
+      onPressed: _addDeckDialog,
+      backgroundColor: Colors.deepPurple,
+      child: Icon(Icons.add, color: Colors.white),
+    ),
+    body: _isLoading
+        ? Center(child: CircularProgressIndicator())
+        : Column(
+            children: [
+              if (_isDiceSectionVisible) _buildDiceSection(),
+              _buildDecksHeader(),
+              if (decks.isEmpty)
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      'Нет колод. Нажмите + чтобы добавить',
+                      style: TextStyle(fontSize: 18, color: Colors.grey),
+                    ),
+                  ),
+                )
+              else
+                _buildDecksGrid(),
+              if (_isDiceSectionVisible) _buildSelectionInfo(),
+            ],
+          ),
+  );
+}
 
   Widget _buildDecksHeader() {
     return Container(
@@ -654,20 +672,25 @@ class _DeckListPageState extends State<DeckListPage> {
     );
   }
 
-  Widget _buildDecksGrid() {
-    return Padding(
+ Widget _buildDecksGrid() {
+  return Expanded(
+    child: Padding(
       padding: const EdgeInsets.all(20.0),
-      child: Wrap(
-        spacing: 20,
-        runSpacing: 20,
-        children: decks.asMap().entries.map((entry) {
-          int index = entry.key;
-          Deck deck = entry.value;
-          return _cube(deck, index);
-        }).toList(),
+      child: GridView.builder(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3, // 3 колонки
+          crossAxisSpacing: 20,
+          mainAxisSpacing: 20,
+          childAspectRatio: 0.75, // Соотношение сторон карточек
+        ),
+        itemCount: decks.length,
+        itemBuilder: (context, index) {
+          return _cube(decks[index], index);
+        },
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _cube(Deck deck, int index) {
     final bool isSelected = index == _selectedDeckIndex;
