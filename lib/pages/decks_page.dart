@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
 import '../models/deck.dart';
-import '../database/firebase_database_helper.dart';
+import '../services/deck_service.dart';
 
 class DeckListPage extends StatefulWidget {
   const DeckListPage({super.key});
@@ -11,23 +11,27 @@ class DeckListPage extends StatefulWidget {
 }
 
 class _DeckListPageState extends State<DeckListPage> {
+  // Переменные для колод
   List<Deck> decks = [];
+  bool _isLoading = true;
+  int? _selectedDeckIndex;
+  late DeckService _deckService;
+
   int _firstDiceValue = 1;
   int _secondDiceValue = 1;
   bool _isRolling = false;
-  int? _selectedDeckIndex;
   final TextEditingController _manualSumController = TextEditingController();
   final Random _fastRandom = Random();
   Random? _secureRandom;
   bool _secureInitialized = false;
-  bool _isLoading = true;
   bool _isDiceSectionVisible = true;
 
   @override
   void initState() {
     super.initState();
+    _deckService = DeckService();
     _initializeSecureRandom();
-    _loadDecksFromFirebase();
+    _getAllDecks();
   }
 
   @override
@@ -36,9 +40,9 @@ class _DeckListPageState extends State<DeckListPage> {
     super.dispose();
   }
 
-  Future<void> _loadDecksFromFirebase() async {
+  Future<void> _getAllDecks() async {
     try {
-      final loadedDecks = await FirebaseDatabaseHelper.instance.getAllDecks();
+      final loadedDecks = await _deckService.getAllDecks();
       setState(() {
         decks = loadedDecks;
         _isLoading = false;
@@ -49,6 +53,66 @@ class _DeckListPageState extends State<DeckListPage> {
         decks = [];
         _isLoading = false;
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ошибка при загрузке списка колод'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _createDeck(String name) async {
+    try {
+      final newDeck = await _deckService.createDeck(name);
+      setState(() {
+        decks.add(newDeck);
+      });
+    } catch (e) {
+      print('Ошибка добавления колоды: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ошибка при добавлении колоды'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _updateDeck(Deck deck) async {
+    try {
+      final updatedDeck = await _deckService.updateDeck(deck);
+      setState(() {
+        final index = decks.indexWhere((d) => d.id == deck.id);
+        if (index != -1) {
+          decks[index] = updatedDeck;
+        }
+      });
+    } catch (e) {
+      print('Ошибка обновления колоды: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ошибка при обновлении колоды'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteDeck(int id) async {
+    try {
+      await _deckService.deleteDeck(id);
+      setState(() {
+        decks.removeWhere((deck) => deck.id == id);
+      });
+    } catch (e) {
+      print('Ошибка удаления колоды: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ошибка при удалении колоды'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -72,7 +136,7 @@ class _DeckListPageState extends State<DeckListPage> {
                 ),
                 onSubmitted: (value) {
                   if (value.trim().isNotEmpty) {
-                    _addDeckToFirebase(value.trim());
+                    _createDeck(value.trim());
                     Navigator.of(context).pop();
                   }
                 },
@@ -88,7 +152,7 @@ class _DeckListPageState extends State<DeckListPage> {
               onPressed: () {
                 final name = nameController.text.trim();
                 if (name.isNotEmpty) {
-                  _addDeckToFirebase(name);
+                  _createDeck(name);
                   Navigator.of(context).pop();
                 }
               },
@@ -100,18 +164,94 @@ class _DeckListPageState extends State<DeckListPage> {
     );
   }
 
-  Future<void> _addDeckToFirebase(String name) async {
+  void _showEditDeckDialog(Deck deck) {
+    final TextEditingController nameController = TextEditingController(
+      text: deck.name,
+    );
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Редактировать колоду'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Введите новое название',
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: (value) {
+                  if (value.trim().isNotEmpty && value != deck.name) {
+                    _updateDeck(deck.copyWith(name: value.trim()));
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () {
+                final newName = nameController.text.trim();
+                if (newName.isNotEmpty && newName != deck.name) {
+                  _updateDeck(deck.copyWith(name: newName));
+                  Navigator.of(context).pop();
+                }
+              },
+              child: Text('Сохранить'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showDeleteDeckDialog(Deck deck) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Удалить колоду'),
+          content: Text(
+            'Вы уверены, что хотите удалить колоду "${deck.name}"?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () {
+                _deleteDeck(deck.id!);
+                Navigator.of(context).pop();
+              },
+              child: Text('Удалить', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _initializeSecureRandom() async {
     try {
-      await FirebaseDatabaseHelper.instance.insertDeck(name);
-      await _loadDecksFromFirebase();
+      _secureRandom = Random.secure();
     } catch (e) {
-      print('Ошибка добавления колоды: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка при добавлении колоды'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      int seed = DateTime.now().microsecondsSinceEpoch ^
+          (DateTime.now().millisecond << 32);
+      _secureRandom = Random(seed);
+    } finally {
+      setState(() {
+        _secureInitialized = true;
+      });
     }
   }
 
@@ -132,21 +272,6 @@ class _DeckListPageState extends State<DeckListPage> {
         _selectedDeckIndex = null;
       }
     });
-  }
-
-  Future<void> _initializeSecureRandom() async {
-    try {
-      _secureRandom = Random.secure();
-    } catch (e) {
-      int seed =
-          DateTime.now().microsecondsSinceEpoch ^
-          (DateTime.now().millisecond << 32);
-      _secureRandom = Random(seed);
-    } finally {
-      setState(() {
-        _secureInitialized = true;
-      });
-    }
   }
 
   void _rollDice() {
@@ -285,11 +410,11 @@ class _DeckListPageState extends State<DeckListPage> {
                 TextButton(
                   onPressed:
                       errorText == null && _manualSumController.text.isNotEmpty
-                      ? () {
-                          _processManualInput();
-                          Navigator.of(context).pop();
-                        }
-                      : null,
+                          ? () {
+                              _processManualInput();
+                              Navigator.of(context).pop();
+                            }
+                          : null,
                   child: Text('OK'),
                 ),
               ],
@@ -321,168 +446,58 @@ class _DeckListPageState extends State<DeckListPage> {
     }
   }
 
-  // Редактирование колоды по долгому нажатию
-  void _showEditDeckDialog(Deck deck) {
-    final TextEditingController nameController = TextEditingController(
-      text: deck.name,
-    );
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Редактировать колоду'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: 'Введите новое название',
-                  border: OutlineInputBorder(),
-                ),
-                onSubmitted: (value) {
-                  if (value.trim().isNotEmpty && value != deck.name) {
-                    _updateDeckInFirebase(deck.id!, value.trim());
-                    Navigator.of(context).pop();
-                  }
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('Отмена'),
-            ),
-            TextButton(
-              onPressed: () {
-                final newName = nameController.text.trim();
-                if (newName.isNotEmpty && newName != deck.name) {
-                  _updateDeckInFirebase(deck.id!, newName);
-                  Navigator.of(context).pop();
-                }
-              },
-              child: Text('Сохранить'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _updateDeckInFirebase(String deckId, String newName) async {
-    try {
-      await FirebaseDatabaseHelper.instance.updateDeck(deckId, newName);
-      await _loadDecksFromFirebase();
-    } catch (e) {
-      print('Ошибка обновления колоды: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка при обновлении колоды'),
-          backgroundColor: Colors.red,
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Колоды',
+          style: TextStyle(fontSize: 20, color: Colors.white),
         ),
-      );
-    }
-  }
-
-  void _showDeleteDeckDialog(Deck deck) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Удалить колоду'),
-          content: Text(
-            'Вы уверены, что хотите удалить колоду "${deck.name}"?',
+        backgroundColor: Colors.blueGrey[900],
+        elevation: 4,
+        actions: [
+          // Кнопка скрытия/показа кубиков
+          IconButton(
+            icon: Icon(
+              _isDiceSectionVisible ? Icons.visibility_off : Icons.visibility,
+              color: Colors.white,
+            ),
+            onPressed: () {
+              setState(() {
+                _isDiceSectionVisible = !_isDiceSectionVisible;
+              });
+            },
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('Отмена'),
-            ),
-            TextButton(
-              onPressed: () {
-                _deleteDeckFromFirebase(deck.id!);
-                Navigator.of(context).pop();
-              },
-              child: Text('Удалить', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _deleteDeckFromFirebase(String deckId) async {
-    try {
-      await FirebaseDatabaseHelper.instance.deleteDeck(deckId);
-      await _loadDecksFromFirebase();
-    } catch (e) {
-      print('Ошибка удаления колоды: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка при удалении колоды'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
- @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(
-      title: const Text(
-        'Колоды',
-        style: TextStyle(fontSize: 20, color: Colors.white),
+        ],
       ),
-      backgroundColor: Colors.blueGrey[900],
-      elevation: 4,
-      actions: [
-        // Кнопка скрытия/показа кубиков
-        IconButton(
-          icon: Icon(
-            _isDiceSectionVisible 
-                ? Icons.visibility_off 
-                : Icons.visibility,
-            color: Colors.white,
-          ),
-          onPressed: () {
-            setState(() {
-              _isDiceSectionVisible = !_isDiceSectionVisible;
-            });
-          },
-        ),
-      ],
-    ),
-    floatingActionButton: FloatingActionButton(
-      onPressed: _addDeckDialog,
-      backgroundColor: Colors.deepPurple,
-      child: Icon(Icons.add, color: Colors.white),
-    ),
-    body: _isLoading
-        ? Center(child: CircularProgressIndicator())
-        : Column(
-            children: [
-              if (_isDiceSectionVisible) _buildDiceSection(),
-              _buildDecksHeader(),
-              if (decks.isEmpty)
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      'Нет колод. Нажмите + чтобы добавить',
-                      style: TextStyle(fontSize: 18, color: Colors.grey),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addDeckDialog,
+        backgroundColor: Colors.deepPurple,
+        child: Icon(Icons.add, color: Colors.white),
+      ),
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                if (_isDiceSectionVisible) _buildDiceSection(),
+                _buildDecksHeader(),
+                if (decks.isEmpty)
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        'Нет колод. Нажмите + чтобы добавить',
+                        style: TextStyle(fontSize: 18, color: Colors.grey),
+                      ),
                     ),
-                  ),
-                )
-              else
-                _buildDecksGrid(),
-              if (_isDiceSectionVisible) _buildSelectionInfo(),
-            ],
-          ),
-  );
-}
+                  )
+                else
+                  _buildDecksGrid(),
+                if (_isDiceSectionVisible) _buildSelectionInfo(),
+              ],
+            ),
+    );
+  }
 
   Widget _buildDecksHeader() {
     return Container(
@@ -503,15 +518,13 @@ Widget build(BuildContext context) {
             ),
           ),
           ElevatedButton.icon(
-            onPressed: (_secureInitialized && !_isRolling)
-                ? _shuffleDecks
-                : null,
+            onPressed:
+                (_secureInitialized && !_isRolling) ? _shuffleDecks : null,
             icon: Icon(Icons.shuffle, size: 20),
             label: Text('Перемешать'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _isRolling
-                  ? Colors.grey[400]
-                  : Colors.amber[700],
+              backgroundColor:
+                  _isRolling ? Colors.grey[400] : Colors.amber[700],
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -672,25 +685,25 @@ Widget build(BuildContext context) {
     );
   }
 
- Widget _buildDecksGrid() {
-  return Expanded(
-    child: Padding(
-      padding: const EdgeInsets.all(20.0),
-      child: GridView.builder(
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3, // 3 колонки
-          crossAxisSpacing: 20,
-          mainAxisSpacing: 20,
-          childAspectRatio: 0.75, // Соотношение сторон карточек
+  Widget _buildDecksGrid() {
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: GridView.builder(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3, // 3 колонки
+            crossAxisSpacing: 20,
+            mainAxisSpacing: 20,
+            childAspectRatio: 0.75, // Соотношение сторон карточек
+          ),
+          itemCount: decks.length,
+          itemBuilder: (context, index) {
+            return _cube(decks[index], index);
+          },
         ),
-        itemCount: decks.length,
-        itemBuilder: (context, index) {
-          return _cube(decks[index], index);
-        },
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _cube(Deck deck, int index) {
     final bool isSelected = index == _selectedDeckIndex;

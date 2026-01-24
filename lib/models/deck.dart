@@ -1,33 +1,40 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class Deck {
-  String? id;
-  String name;
-  DateTime createdAt;
-  DateTime? updatedAt; // Добавляем поле для отслеживания обновлений
+  final int id;
+  final String name;
+  final DateTime createdAt;
+  final DateTime updatedAt;
 
-  Deck({this.id, required this.name, DateTime? createdAt, this.updatedAt})
-    : createdAt = createdAt ?? DateTime.now();
+  // Приватный конструктор - нельзя создать Deck вручную
+  Deck._({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+    required this.updatedAt,
+  });
 
-  factory Deck.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return Deck(
-      id: doc.id,
-      name: data['name'] ?? 'Без названия',
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+   Deck copyWith({String? name}) {
+    return Deck._(
+      id: id,
+      name: name ?? this.name,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
     );
   }
 
-  Map<String, dynamic> toMap() {
-    final map = {'name': name, 'createdAt': Timestamp.fromDate(createdAt)};
-
-    if (updatedAt != null) {
-      map['updatedAt'] = Timestamp.fromDate(updatedAt!);
-    }
-
-    return map;
+  // Фабрика ТОЛЬКО для парсинга ответа сервера
+  factory Deck.fromJson(Map<String, dynamic> json) {
+    return Deck._(
+      id: json['id'] as int,
+      name: json['name'] as String,
+      createdAt: DateTime.parse(json['created_at']),
+      updatedAt: DateTime.parse(json['updated_at']),
+    );
   }
 
-  // ... остальные методы без изменений
+  // Для обновления (PUT запрос)
+  Map<String, dynamic> toJsonForUpdate() {
+    return {
+      'name': name,
+    };
+  }
 }
