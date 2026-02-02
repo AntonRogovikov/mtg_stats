@@ -326,7 +326,6 @@ class _GamePageState extends State<GamePage> {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 5),
                     _buildTeamSection(
                         title: 'Команда 1',
@@ -692,15 +691,10 @@ class _GamePageState extends State<GamePage> {
     for (final u in _users) {
       if (!orderedUsers.contains(u)) orderedUsers.add(u);
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Игрок:',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -782,94 +776,93 @@ class _GamePageState extends State<GamePage> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      SizedBox(
+                        width: 200,
+                        child: ElevatedButton.icon(
+                          onPressed: (_isRolling || !_secureInitialized)
+                              ? null
+                              : _rollDiceForDeck,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                _isRolling ? Colors.grey : Colors.deepPurple,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: _isRolling
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white70),
+                                  ),
+                                )
+                              : const Icon(Icons.casino, size: 20),
+                          label: const Text(
+                            'Бросить кубики',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 200,
+                        child: ElevatedButton.icon(
+                          onPressed: _isRolling ? null : _manualSumInput,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.amber[700],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: const Icon(Icons.edit, size: 20),
+                          label: const Text(
+                            'Ввести вручную',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 200,
+                        child: ElevatedButton.icon(
+                          onPressed: (_allDecks.isEmpty ||
+                                  _selectedUserId == null ||
+                                  _isRolling)
+                              ? null
+                              : _showManualDeckPicker,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueGrey[700],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: const Icon(Icons.collections_bookmark, size: 20),
+                          label: const Text(
+                            'Выбрать вручную',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
-          ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 200,
-                child: ElevatedButton.icon(
-                  onPressed: (_isRolling || !_secureInitialized)
-                      ? null
-                      : _rollDiceForDeck,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        _isRolling ? Colors.grey : Colors.deepPurple,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: _isRolling
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white70),
-                          ),
-                        )
-                      : const Icon(Icons.casino, size: 20),
-                  label: const Text(
-                    'Бросить кубики',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: 200,
-                child: ElevatedButton.icon(
-                  onPressed: _isRolling ? null : _manualSumInput,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.amber[700],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(Icons.edit, size: 20),
-                  label: const Text(
-                    'Ввести вручную',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: 200,
-                child: ElevatedButton.icon(
-                  onPressed: (_allDecks.isEmpty ||
-                          _selectedUserId == null ||
-                          _isRolling)
-                      ? null
-                      : _showManualDeckPicker,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueGrey[700],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(Icons.collections_bookmark, size: 20),
-                  label: const Text(
-                    'Выбрать вручную',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -889,8 +882,8 @@ class _GamePageState extends State<GamePage> {
         const SizedBox(height: 8),
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          width: 70,
-          height: 70,
+          width: 100,
+          height: 100,
           decoration: BoxDecoration(
             color: _isRolling ? Colors.grey[100] : Colors.blue[50],
             borderRadius: BorderRadius.circular(16),
@@ -906,7 +899,7 @@ class _GamePageState extends State<GamePage> {
                 '$value',
                 key: ValueKey<int>(value),
                 style: TextStyle(
-                  fontSize: 32,
+                  fontSize: 38,
                   fontWeight: FontWeight.bold,
                   color: _isRolling ? Colors.grey[600] : Colors.blue[900],
                 ),

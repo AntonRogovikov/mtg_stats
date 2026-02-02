@@ -62,11 +62,11 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
           backgroundColor: Colors.blueGrey[900],
           automaticallyImplyLeading: false,
         ),
-        body: Padding(
+        body: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             Card(
               elevation: 2,
               child: Padding(
@@ -236,7 +236,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                 ),
               ),
             ),
-            const Spacer(),
+            const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () => _finishGame(context),
               icon: const Icon(Icons.flag),
@@ -251,9 +251,9 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
               ),
             ),
           ],
+          ),
         ),
       ),
-    ),
     );
   }
 
