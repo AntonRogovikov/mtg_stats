@@ -1,34 +1,33 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:mtg_stats/models/deck.dart';
 
+/// API колод: создание, обновление, получение списка и удаление.
 class DeckService {
-  
-  static const String baseUrl = 'https://mtg-stats-backend-production-1a71.up.railway.app';
-  
-  // Создание - отправляем только имя
+  static const String baseUrl =
+      'https://mtg-stats-backend-production-1a71.up.railway.app';
+
   Future<Deck> createDeck(String name) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/decks'),
-      body: json.encode({'name': name}), // Только имя!
+      body: json.encode({'name': name}),
       headers: {'Content-Type': 'application/json'},
     );
 
     return Deck.fromJson(json.decode(response.body));
   }
 
-  // Обновление - отправляем только измененные поля
   Future<Deck> updateDeck(Deck deck) async {
     final response = await http.put(
       Uri.parse('$baseUrl/api/decks/${deck.id}'),
-      body: json.encode(deck.toJsonForUpdate()), // Только имя
+      body: json.encode(deck.toJsonForUpdate()),
       headers: {'Content-Type': 'application/json'},
     );
 
     return Deck.fromJson(json.decode(response.body));
   }
 
-  // Получение
   Future<Deck> getDeck(int id) async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/decks/$id'),
@@ -37,7 +36,6 @@ class DeckService {
     return Deck.fromJson(json.decode(response.body));
   }
 
-  // Получение списка
   Future<List<Deck>> getAllDecks() async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/decks'),
@@ -47,7 +45,6 @@ class DeckService {
     return data.map((json) => Deck.fromJson(json)).toList();
   }
 
-  // Удаление
   Future<void> deleteDeck(int id) async {
     final response = await http.delete(
       Uri.parse('$baseUrl/api/decks/$id'),

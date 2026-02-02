@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+/// Главная страница: кнопки перехода к партиям, статистике и колодам.
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -19,11 +20,10 @@ class HomePage extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _HomeButton(
-              text: 'КОЛОДЫ',
-              icon: Icons.import_contacts,
+              text: 'ПАРТИИ',
+              icon: Icons.sports_esports,
               onPressed: () {
-                //print('Открываем список колод');
-                 Navigator.pushNamed(context, '/decks');
+                Navigator.pushNamed(context, '/games');
               },
             ),
             const SizedBox(height: 20),
@@ -31,16 +31,14 @@ class HomePage extends StatelessWidget {
               text: 'СТАТИСТИКА',
               icon: Icons.bar_chart,
               onPressed: () {
-                //print('Открываем статистику');
+                Navigator.pushNamed(context, '/stats');
               },
             ),
             const SizedBox(height: 20),
             _HomeButton(
-              text: 'ПАРТИИ',
-              icon: Icons.sports_esports,
-              onPressed: () {
-                //print('Открываем историю матчей');
-              },
+              text: 'КОЛОДЫ',
+              icon: Icons.import_contacts,
+              onPressed: () => Navigator.pushNamed(context, '/decks'),
             ),
           ],
         ),

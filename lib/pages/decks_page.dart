@@ -1,8 +1,11 @@
-import 'package:flutter/material.dart';
 import 'dart:math';
-import '../models/deck.dart';
-import '../services/deck_service.dart';
 
+import 'package:flutter/material.dart';
+import 'package:mtg_stats/models/deck.dart';
+import 'package:mtg_stats/services/deck_service.dart';
+import 'package:mtg_stats/widgets/deck_card.dart';
+
+/// Страница списка колод: CRUD, кубики для случайного выбора колоды.
 class DeckListPage extends StatefulWidget {
   const DeckListPage({super.key});
 
@@ -11,7 +14,6 @@ class DeckListPage extends StatefulWidget {
 }
 
 class _DeckListPageState extends State<DeckListPage> {
-  // Переменные для колод
   List<Deck> decks = [];
   bool _isLoading = true;
   int? _selectedDeckIndex;
@@ -48,7 +50,6 @@ class _DeckListPageState extends State<DeckListPage> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Ошибка загрузки колод: $e');
       setState(() {
         decks = [];
         _isLoading = false;
@@ -69,7 +70,6 @@ class _DeckListPageState extends State<DeckListPage> {
         decks.add(newDeck);
       });
     } catch (e) {
-      print('Ошибка добавления колоды: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Ошибка при добавлении колоды'),
@@ -89,7 +89,6 @@ class _DeckListPageState extends State<DeckListPage> {
         }
       });
     } catch (e) {
-      print('Ошибка обновления колоды: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Ошибка при обновлении колоды'),
@@ -106,7 +105,6 @@ class _DeckListPageState extends State<DeckListPage> {
         decks.removeWhere((deck) => deck.id == id);
       });
     } catch (e) {
-      print('Ошибка удаления колоды: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Ошибка при удалении колоды'),
@@ -230,7 +228,7 @@ class _DeckListPageState extends State<DeckListPage> {
             ),
             TextButton(
               onPressed: () {
-                _deleteDeck(deck.id!);
+                _deleteDeck(deck.id);
                 Navigator.of(context).pop();
               },
               child: Text('Удалить', style: TextStyle(color: Colors.red)),
@@ -356,8 +354,8 @@ class _DeckListPageState extends State<DeckListPage> {
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Диапазон: от 2 до 40'),
-                  SizedBox(height: 10),
+                  const Text('Диапазон: от 2 до 40'),
+                  const SizedBox(height: 10),
                   TextField(
                     controller: _manualSumController,
                     keyboardType: TextInputType.number,
@@ -457,7 +455,6 @@ class _DeckListPageState extends State<DeckListPage> {
         backgroundColor: Colors.blueGrey[900],
         elevation: 4,
         actions: [
-          // Кнопка скрытия/показа кубиков
           IconButton(
             icon: Icon(
               _isDiceSectionVisible ? Icons.visibility_off : Icons.visibility,
@@ -477,7 +474,7 @@ class _DeckListPageState extends State<DeckListPage> {
         child: Icon(Icons.add, color: Colors.white),
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
                 if (_isDiceSectionVisible) _buildDiceSection(),
@@ -487,7 +484,7 @@ class _DeckListPageState extends State<DeckListPage> {
                     child: Center(
                       child: Text(
                         'Нет колод. Нажмите + чтобы добавить',
-                        style: TextStyle(fontSize: 18, color: Colors.grey),
+                        style: const TextStyle(fontSize: 18, color: Colors.grey),
                       ),
                     ),
                   )
@@ -690,93 +687,34 @@ class _DeckListPageState extends State<DeckListPage> {
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: GridView.builder(
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3, // 3 колонки
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
             crossAxisSpacing: 20,
             mainAxisSpacing: 20,
-            childAspectRatio: 0.75, // Соотношение сторон карточек
+            childAspectRatio: 0.75,
           ),
           itemCount: decks.length,
           itemBuilder: (context, index) {
-            return _cube(decks[index], index);
+            final deck = decks[index];
+            final isSelected = index == _selectedDeckIndex;
+            return DeckCard(
+              deck: deck,
+              isSelected: isSelected,
+              onTap: () {
+                setState(() {
+                  _selectedDeckIndex = index;
+                });
+              },
+              onLongPress: () {
+                _showDeckOptions(deck);
+              },
+            );
           },
         ),
       ),
     );
   }
 
-  Widget _cube(Deck deck, int index) {
-    final bool isSelected = index == _selectedDeckIndex;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedDeckIndex = index;
-        });
-      },
-      onLongPress: () {
-        _showDeckOptions(deck);
-      },
-      child: Card(
-        elevation: isSelected ? 8 : 3,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(6),
-          side: BorderSide(
-            color: isSelected ? Colors.blue : Colors.transparent,
-            width: isSelected ? 3 : 0,
-          ),
-        ),
-        child: Container(
-          width: 100,
-          height: 140,
-          decoration: BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage('assets/images/back_card.jpg'),
-              fit: BoxFit.fill,
-            ),
-            borderRadius: BorderRadius.circular(6),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: Color.fromRGBO(33, 150, 243, 0.5),
-                      blurRadius: 10,
-                      spreadRadius: 2,
-                    ),
-                  ]
-                : [],
-          ),
-          child: Stack(
-            children: [
-              Center(
-                child: Text(
-                  deck.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              if (isSelected)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    padding: EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.check, color: Colors.white, size: 16),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   void _showDeckOptions(Deck deck) {
     showModalBottomSheet(

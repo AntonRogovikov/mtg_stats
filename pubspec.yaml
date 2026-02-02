@@ -16,6 +16,11 @@ dependencies:
   # Для работы с JSON
   json_annotation: ^4.9.0
 
+  stop_watch_timer: ^3.2.2
+
+  # Интерактивные графики (гистограммы)
+  fl_chart: ^0.69.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
