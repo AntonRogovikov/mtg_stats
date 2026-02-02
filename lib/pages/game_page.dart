@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/models/deck.dart';
@@ -748,113 +749,96 @@ class _GamePageState extends State<GamePage> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _diceDisplay('Кубик 1', _firstDiceValue),
-                      const SizedBox(width: 16),
-                      _diceDisplay('Кубик 2', _secondDiceValue),
+                      _diceDisplay('Кубик 1', _firstDiceValue, Colors.blue),
+                      _diceOperator('+'),
+                      _diceDisplay('Кубик 2', _secondDiceValue, Colors.blue),
+                      _diceOperator('='),
+                      _diceDisplay('Сумма', sum, Colors.deepPurple),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 8, horizontal: 24),
-                    decoration: BoxDecoration(
-                      color: _isRolling ? Colors.grey[100] : Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color:
-                            _isRolling ? Colors.grey[300]! : Colors.deepPurple,
-                        width: 2,
-                      ),
-                    ),
-                    child: Text(
-                      'Сумма: $sum',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color:
-                            _isRolling ? Colors.grey[600] : Colors.deepPurple,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                  const SizedBox(height: 12),
+                  Row(
                     children: [
-                      SizedBox(
-                        width: 200,
-                        child: ElevatedButton.icon(
-                          onPressed: (_isRolling || !_secureInitialized)
-                              ? null
-                              : _rollDiceForDeck,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                _isRolling ? Colors.grey : Colors.deepPurple,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 15),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: ElevatedButton.icon(
+                            onPressed: (_isRolling || !_secureInitialized)
+                                ? null
+                                : _rollDiceForDeck,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  _isRolling ? Colors.grey : Colors.deepPurple,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
-                          ),
-                          icon: _isRolling
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white70),
-                                  ),
-                                )
-                              : const Icon(Icons.casino, size: 20),
-                          label: const Text(
-                            'Бросить кубики',
-                            style: TextStyle(fontSize: 16),
+                            icon: _isRolling
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.white70),
+                                    ),
+                                  )
+                                : const Icon(Icons.casino, size: 18),
+                            label: const Text(
+                              'Бросить кубики',
+                              style: TextStyle(fontSize: 13),
+                            ),
                           ),
                         ),
                       ),
-                      SizedBox(
-                        width: 200,
-                        child: ElevatedButton.icon(
-                          onPressed: _isRolling ? null : _manualSumInput,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.amber[700],
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 15),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: ElevatedButton.icon(
+                            onPressed: _isRolling ? null : _manualSumInput,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.amber[700],
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
-                          ),
-                          icon: const Icon(Icons.edit, size: 20),
-                          label: const Text(
-                            'Ввести вручную',
-                            style: TextStyle(fontSize: 16),
+                            icon: const Icon(Icons.edit, size: 18),
+                            label: const Text(
+                              'Ввести вручную',
+                              style: TextStyle(fontSize: 13),
+                            ),
                           ),
                         ),
                       ),
-                      SizedBox(
-                        width: 200,
-                        child: ElevatedButton.icon(
-                          onPressed: (_allDecks.isEmpty ||
-                                  _selectedUserId == null ||
-                                  _isRolling)
-                              ? null
-                              : _showManualDeckPicker,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blueGrey[700],
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 15),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: ElevatedButton.icon(
+                            onPressed: (_allDecks.isEmpty ||
+                                    _selectedUserId == null ||
+                                    _isRolling)
+                                ? null
+                                : _showManualDeckPicker,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blueGrey[700],
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
-                          ),
-                          icon: const Icon(Icons.collections_bookmark, size: 20),
-                          label: const Text(
-                            'Выбрать вручную',
-                            style: TextStyle(fontSize: 16),
+                            icon: const Icon(Icons.collections_bookmark, size: 18),
+                            label: const Text(
+                              'Выбрать вручную',
+                              style: TextStyle(fontSize: 13),
+                            ),
                           ),
                         ),
                       ),
@@ -869,26 +853,49 @@ class _GamePageState extends State<GamePage> {
     );
   }
 
-  Widget _diceDisplay(String label, int value) {
+  Widget _diceOperator(String symbol) {
+    return Column(
+      children: [
+        SizedBox(height: 22),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10.0),
+          child: Center(
+            child: Text(
+              symbol,
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+        )
+      ],
+    );
+  }
+
+  Widget _diceDisplay(String label, int value, MaterialColor color) {
+    final borderColor = color[900] ?? color;
+    final backgroundColor = color[50] ?? color;
     return Column(
       children: [
         Text(
           label,
           style: TextStyle(
-            color: _isRolling ? Colors.grey[600] : Colors.black,
+            color: _isRolling ? Colors.grey[600]! : Colors.black,
             fontWeight: FontWeight.w500,
           ),
         ),
         const SizedBox(height: 8),
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          width: 100,
-          height: 100,
+          width: 80,
+          height: 80,
           decoration: BoxDecoration(
-            color: _isRolling ? Colors.grey[100] : Colors.blue[50],
+            color: _isRolling ? Colors.grey[100] : backgroundColor,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: _isRolling ? Colors.grey[400]! : Colors.blue,
+              color: _isRolling ? Colors.grey[400]! : color,
               width: 3,
             ),
           ),
@@ -899,9 +906,9 @@ class _GamePageState extends State<GamePage> {
                 '$value',
                 key: ValueKey<int>(value),
                 style: TextStyle(
-                  fontSize: 38,
+                  fontSize: 32,
                   fontWeight: FontWeight.bold,
-                  color: _isRolling ? Colors.grey[600] : Colors.blue[900],
+                  color: _isRolling ? Colors.grey[600]! : borderColor,
                 ),
               ),
             ),
