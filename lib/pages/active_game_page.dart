@@ -1,11 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/services/game_manager.dart';
 import 'package:mtg_stats/services/game_service.dart';
 
-/// Страница активной партии: таймеры, ходы, завершение игры.
+/// Активная партия: таймеры, ходы, завершение.
 class ActiveGamePage extends StatefulWidget {
   const ActiveGamePage({super.key});
 
@@ -55,11 +56,8 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
       canPop: false,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text(
-            'Активная партия',
-            style: TextStyle(fontSize: 20, color: Colors.white),
-          ),
-          backgroundColor: Colors.blueGrey[900],
+          title: Text('Активная партия', style: AppTheme.appBarTitle),
+          backgroundColor: AppTheme.appBarBackground,
           automaticallyImplyLeading: false,
         ),
         body: SingleChildScrollView(
@@ -111,12 +109,11 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      if (GameManager.instance.currentTurnTeam != null &&
-                          _teamPlayers(game, GameManager.instance.currentTurnTeam!).isNotEmpty)
+                      if (_teamPlayers(game, GameManager.instance.currentTurnTeam).isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 4.0),
                           child: Text(
-                            _teamPlayers(game, GameManager.instance.currentTurnTeam!).join(', '),
+                            _teamPlayers(game, GameManager.instance.currentTurnTeam).join(', '),
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.grey[700],
@@ -259,6 +256,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
 
   Future<void> _finishGame(BuildContext context) async {
     int? selectedTeam = 1;
+    final navigator = Navigator.of(context);
 
     final result = await showDialog<int>(
       context: context,
@@ -267,30 +265,20 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
           title: const Text('Кто победил?'),
           content: StatefulBuilder(
             builder: (context, setState) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  RadioListTile<int>(
-                    title: const Text('Команда 1'),
-                    value: 1,
-                    groupValue: selectedTeam,
-                    onChanged: (value) {
-                      setState(() {
-                        selectedTeam = value;
-                      });
-                    },
-                  ),
-                  RadioListTile<int>(
-                    title: const Text('Команда 2'),
-                    value: 2,
-                    groupValue: selectedTeam,
-                    onChanged: (value) {
-                      setState(() {
-                        selectedTeam = value;
-                      });
-                    },
-                  ),
-                ],
+              return RadioGroup<int>(
+                groupValue: selectedTeam,
+                onChanged: (value) {
+                  setState(() {
+                    selectedTeam = value;
+                  });
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    RadioListTile<int>(title: const Text('Команда 1'), value: 1),
+                    RadioListTile<int>(title: const Text('Команда 2'), value: 2),
+                  ],
+                ),
               );
             },
           ),
@@ -320,7 +308,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
       GameManager.instance.finishGame(winningTeam: result);
       GameManager.instance.clearActiveGame();
       if (mounted) {
-        Navigator.of(context).pop();
+        navigator.pop();
       }
     }
   }

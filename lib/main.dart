@@ -1,15 +1,18 @@
-/// Точка входа приложения MTG Stats — статистика партий Magic: The Gathering.
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/pages/decks_page.dart';
 import 'package:mtg_stats/pages/game_page.dart';
 import 'package:mtg_stats/pages/home_page.dart';
+import 'package:mtg_stats/pages/settings_page.dart';
 import 'package:mtg_stats/pages/stats_page.dart';
+import 'package:mtg_stats/services/api_config.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await ApiConfig.load();
   runApp(const MyApp());
 }
 
-/// Корневой виджет приложения: маршруты и домашняя страница.
+/// Корневой виджет приложения: маршрутизация по разделам.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -21,6 +24,7 @@ class MyApp extends StatelessWidget {
         '/decks': (context) => const DeckListPage(),
         '/games': (context) => const GamePage(),
         '/stats': (context) => const StatsPage(),
+        '/settings': (context) => const SettingsPage(),
       },
     );
   }

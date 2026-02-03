@@ -1,5 +1,4 @@
-/// Модели игры: ход, игрок, игра. Сериализация в/из JSON для API.
-
+/// Модели игры: ход, игрок, игра (сериализация JSON для API).
 class GameTurn {
   final int teamNumber;
   final Duration duration;
@@ -11,11 +10,18 @@ class GameTurn {
     required this.overtime,
   });
 
+  static int _parseInt(dynamic v, [int fallback = 0]) {
+    if (v == null) return fallback;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return fallback;
+  }
+
   factory GameTurn.fromJson(Map<String, dynamic> json) {
     return GameTurn(
-      teamNumber: json['team_number'] as int,
-      duration: Duration(seconds: json['duration_sec'] as int? ?? 0),
-      overtime: Duration(seconds: json['overtime_sec'] as int? ?? 0),
+      teamNumber: _parseInt(json['team_number'], 1),
+      duration: Duration(seconds: _parseInt(json['duration_sec'])),
+      overtime: Duration(seconds: _parseInt(json['overtime_sec'])),
     );
   }
 

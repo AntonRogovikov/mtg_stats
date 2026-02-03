@@ -1,42 +1,22 @@
 import 'dart:math';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/models/game.dart';
+import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/models/user.dart';
 import 'package:mtg_stats/pages/active_game_page.dart';
 import 'package:mtg_stats/pages/deck_picker_page.dart';
 import 'package:mtg_stats/services/deck_service.dart';
 import 'package:mtg_stats/services/game_manager.dart';
 import 'package:mtg_stats/services/game_service.dart';
 
-/// Страница настройки новой партии: команды, первый ход, колоды игроков (кубики/ручной выбор).
+/// Настройка новой партии: команды, первый ход, колоды игроков.
 class GamePage extends StatefulWidget {
   const GamePage({super.key});
 
   @override
   State<GamePage> createState() => _GamePageState();
-}
-
-class User {
-  final String id;
-  final String name;
-
-  User({
-    required this.id,
-    required this.name,
-  });
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is User && runtimeType == other.runtimeType && id == other.id;
-
-  @override
-  int get hashCode => id.hashCode;
-
-  @override
-  String toString() => name;
 }
 
 class _GamePageState extends State<GamePage> {
@@ -62,8 +42,8 @@ class _GamePageState extends State<GamePage> {
   bool _secureInitialized = false;
   final TextEditingController _manualSumController = TextEditingController();
 
-  List<User> _team1 = [];
-  List<User> _team2 = [];
+  final List<User> _team1 = [];
+  final List<User> _team2 = [];
 
   bool _teamsExpanded = false;
 
@@ -275,11 +255,8 @@ class _GamePageState extends State<GamePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Новая партия',
-          style: TextStyle(fontSize: 20, color: Colors.white),
-        ),
-        backgroundColor: Colors.blueGrey[900],
+        title: Text('Новая партия', style: AppTheme.appBarTitle),
+        backgroundColor: AppTheme.appBarBackground,
         elevation: 4,
       ),
       body: SingleChildScrollView(

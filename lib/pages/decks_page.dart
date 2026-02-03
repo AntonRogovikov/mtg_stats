@@ -1,11 +1,15 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/core/constants.dart';
 import 'package:mtg_stats/models/deck.dart';
+import 'package:mtg_stats/pages/deck_card_page.dart';
+import 'package:mtg_stats/pages/full_screen_image_page.dart';
 import 'package:mtg_stats/services/deck_service.dart';
 import 'package:mtg_stats/widgets/deck_card.dart';
 
-/// Страница списка колод: CRUD, кубики для случайного выбора колоды.
+/// Список колод: CRUD, кубики для выбора, открытие карточки колоды.
 class DeckListPage extends StatefulWidget {
   const DeckListPage({super.key});
 
@@ -26,7 +30,7 @@ class _DeckListPageState extends State<DeckListPage> {
   final Random _fastRandom = Random();
   Random? _secureRandom;
   bool _secureInitialized = false;
-  bool _isDiceSectionVisible = true;
+  bool _isDiceSectionVisible = false;
 
   @override
   void initState() {
@@ -54,63 +58,54 @@ class _DeckListPageState extends State<DeckListPage> {
         decks = [];
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка при загрузке списка колод'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при загрузке списка колод'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _createDeck(String name) async {
     try {
       final newDeck = await _deckService.createDeck(name);
-      setState(() {
-        decks.add(newDeck);
-      });
+      if (mounted) {
+        setState(() {
+          decks.add(newDeck);
+        });
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка при добавлении колоды'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _updateDeck(Deck deck) async {
-    try {
-      final updatedDeck = await _deckService.updateDeck(deck);
-      setState(() {
-        final index = decks.indexWhere((d) => d.id == deck.id);
-        if (index != -1) {
-          decks[index] = updatedDeck;
-        }
-      });
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка при обновлении колоды'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при добавлении колоды'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _deleteDeck(int id) async {
     try {
       await _deckService.deleteDeck(id);
-      setState(() {
-        decks.removeWhere((deck) => deck.id == id);
-      });
+      if (mounted) {
+        setState(() {
+          decks.removeWhere((deck) => deck.id == id);
+        });
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка при удалении колоды'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при удалении колоды'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -155,56 +150,6 @@ class _DeckListPageState extends State<DeckListPage> {
                 }
               },
               child: Text('Добавить'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showEditDeckDialog(Deck deck) {
-    final TextEditingController nameController = TextEditingController(
-      text: deck.name,
-    );
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Редактировать колоду'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: 'Введите новое название',
-                  border: OutlineInputBorder(),
-                ),
-                onSubmitted: (value) {
-                  if (value.trim().isNotEmpty && value != deck.name) {
-                    _updateDeck(deck.copyWith(name: value.trim()));
-                    Navigator.of(context).pop();
-                  }
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('Отмена'),
-            ),
-            TextButton(
-              onPressed: () {
-                final newName = nameController.text.trim();
-                if (newName.isNotEmpty && newName != deck.name) {
-                  _updateDeck(deck.copyWith(name: newName));
-                  Navigator.of(context).pop();
-                }
-              },
-              child: Text('Сохранить'),
             ),
           ],
         );
@@ -440,7 +385,7 @@ class _DeckListPageState extends State<DeckListPage> {
             _selectDeckBySum(sum);
           });
         }
-      } catch (e) {}
+      } catch (_) {}
     }
   }
 
@@ -448,17 +393,14 @@ class _DeckListPageState extends State<DeckListPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Колоды',
-          style: TextStyle(fontSize: 20, color: Colors.white),
-        ),
-        backgroundColor: Colors.blueGrey[900],
+        title: Text('Колоды', style: AppTheme.appBarTitle),
+        backgroundColor: AppTheme.appBarBackground,
         elevation: 4,
         actions: [
           IconButton(
             icon: Icon(
               _isDiceSectionVisible ? Icons.visibility_off : Icons.visibility,
-              color: Colors.white,
+              color: AppTheme.appBarForeground,
             ),
             onPressed: () {
               setState(() {
@@ -484,7 +426,8 @@ class _DeckListPageState extends State<DeckListPage> {
                     child: Center(
                       child: Text(
                         'Нет колод. Нажмите + чтобы добавить',
-                        style: const TextStyle(fontSize: 18, color: Colors.grey),
+                        style:
+                            const TextStyle(fontSize: 18, color: Colors.grey),
                       ),
                     ),
                   )
@@ -690,8 +633,8 @@ class _DeckListPageState extends State<DeckListPage> {
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
             crossAxisSpacing: 20,
-            mainAxisSpacing: 20,
-            childAspectRatio: 0.75,
+            mainAxisSpacing: 10,
+            childAspectRatio: 0.61,
           ),
           itemCount: decks.length,
           itemBuilder: (context, index) {
@@ -706,15 +649,23 @@ class _DeckListPageState extends State<DeckListPage> {
                 });
               },
               onLongPress: () {
-                _showDeckOptions(deck);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => FullScreenImagePage(
+                      imagePathOrUrl: deck.imageUrl ?? deck.avatarUrl,
+                      assetFallback: AppConstants.defaultDeckImageAsset,
+                    ),
+                  ),
+                );
               },
+              onMenuTap: () => _showDeckOptions(deck),
             );
           },
         ),
       ),
     );
   }
-
 
   void _showDeckOptions(Deck deck) {
     showModalBottomSheet(
@@ -725,16 +676,32 @@ class _DeckListPageState extends State<DeckListPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: Icon(Icons.edit, color: Colors.blue),
-                title: Text('Редактировать "${deck.name}"'),
+                leading: Icon(Icons.badge, color: Colors.blue),
+                title: Text('Открыть'),
                 onTap: () {
                   Navigator.pop(context);
-                  _showEditDeckDialog(deck);
+                  Navigator.push<Deck>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => DeckCardPage(
+                        deck: deck,
+                        deckService: _deckService,
+                      ),
+                    ),
+                  ).then((updated) async {
+                    if (updated != null) {
+                      final index = decks.indexWhere((d) => d.id == updated.id);
+                      if (index != -1) {
+                        setState(() => decks[index] = updated);
+                      }
+                      await _getAllDecks();
+                    }
+                  });
                 },
               ),
               ListTile(
                 leading: Icon(Icons.delete, color: Colors.red),
-                title: Text('Удалить "${deck.name}"'),
+                title: Text('Удалить'),
                 onTap: () {
                   Navigator.pop(context);
                   _showDeleteDeckDialog(deck);

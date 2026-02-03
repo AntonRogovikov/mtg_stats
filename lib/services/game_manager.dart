@@ -1,6 +1,6 @@
 import 'package:mtg_stats/models/game.dart';
 
-/// Синглтон: активная игра, текущий ход, таймеры. Синхронизация с API через GameService.
+/// Синглтон: активная игра, текущий ход, таймеры (синхронизация с API через GameService).
 class GameManager {
   Game? _activeGame;
   int _currentTurnTeam = 1;

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/widgets/home_button.dart';
 
-/// Главная страница: кнопки перехода к партиям, статистике и колодам.
+/// Главная страница приложения: навигация к партиям, статистике и колодам.
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -8,34 +10,33 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'MTG Статистика',
-          style: TextStyle(fontSize: 20, color: Colors.white),
-        ),
-        backgroundColor: Colors.blueGrey[900],
+        title: Text('MTG Статистика', style: AppTheme.appBarTitle),
+        backgroundColor: AppTheme.appBarBackground,
         elevation: 4,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: AppTheme.appBarForeground),
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
+          ),
+        ],
       ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _HomeButton(
+            HomeButton(
               text: 'ПАРТИИ',
               icon: Icons.sports_esports,
-              onPressed: () {
-                Navigator.pushNamed(context, '/games');
-              },
+              onPressed: () => Navigator.pushNamed(context, '/games'),
             ),
             const SizedBox(height: 20),
-            _HomeButton(
+            HomeButton(
               text: 'СТАТИСТИКА',
               icon: Icons.bar_chart,
-              onPressed: () {
-                Navigator.pushNamed(context, '/stats');
-              },
+              onPressed: () => Navigator.pushNamed(context, '/stats'),
             ),
             const SizedBox(height: 20),
-            _HomeButton(
+            HomeButton(
               text: 'КОЛОДЫ',
               icon: Icons.import_contacts,
               onPressed: () => Navigator.pushNamed(context, '/decks'),
@@ -44,47 +45,6 @@ class HomePage extends StatelessWidget {
         ),
       ),
       backgroundColor: Colors.grey[100],
-    );
-  }
-}
-
-class _HomeButton extends StatelessWidget {
-  final String text;
-  final IconData icon;
-  final VoidCallback onPressed;
-
-  const _HomeButton({
-    required this.text,
-    required this.icon,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ElevatedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 28, color: Colors.white),
-      label: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1.0,
-          color: Colors.white,
-        ),
-      ),
-      style: ElevatedButton.styleFrom(
-        minimumSize: const Size(280, 65),
-        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-        backgroundColor: const Color(0xFF1565C0),
-        foregroundColor: Colors.white,
-        shadowColor: Color.fromRGBO(13, 71, 161, 0.5),
-        elevation: 6,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: Colors.blue[900]!, width: 2),
-        ),
-      ),
     );
   }
 }

@@ -1,11 +1,12 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/models/stats.dart';
 import 'package:mtg_stats/services/stats_service.dart';
 
-/// Режимы отображения статистики: список, гистограмма, круговая диаграмма, подиум.
 enum StatsViewMode { list, histogram, pie, podium }
 
-/// Страница статистики игроков и колод: загрузка с API, переключение видов.
+/// Статистика игроков и колод: загрузка с API, виды (список, графики, подиум).
 class StatsPage extends StatefulWidget {
   const StatsPage({super.key});
 
@@ -66,16 +67,13 @@ class _StatsPageState extends State<StatsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Статистика',
-          style: TextStyle(fontSize: 20, color: Colors.white),
-        ),
-        backgroundColor: Colors.blueGrey[900],
+        title: Text('Статистика', style: AppTheme.appBarTitle),
+        backgroundColor: AppTheme.appBarBackground,
         actions: [
           PopupMenuButton<StatsViewMode>(
             icon: Icon(
               _iconForViewMode(_viewMode),
-              color: Colors.white,
+              color: AppTheme.appBarForeground,
             ),
             tooltip: 'Вид статистики',
             onSelected: (mode) => setState(() => _viewMode = mode),
@@ -320,9 +318,9 @@ class _StatsPageState extends State<StatsPage> {
                 label: s.playerName,
                 value: s.winPercent,
                 tooltipLines: [
-                  '${s.playerName}',
+                  s.playerName,
                   'Игр: ${s.gamesCount}, побед: ${s.winsCount}',
-                  'Успешность: ${s.winPercent.toStringAsFixed(1)}%',
+                  'Успешность: ${s.winPercent.toStringAsFixed(1)}%'
                 ],
               ))
           .toList(),

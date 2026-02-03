@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:mtg_stats/core/constants.dart';
 import 'package:mtg_stats/models/deck.dart';
+import 'package:mtg_stats/pages/full_screen_image_page.dart';
 import 'package:mtg_stats/widgets/deck_card.dart';
 
-/// Экран выбора колоды для игрока — сетка колод как на decks_page.
+/// Выбор колоды для игрока в партии (сетка колод).
 class DeckPickerPage extends StatelessWidget {
   final String userName;
   final String userId;
@@ -43,7 +45,7 @@ class DeckPickerPage extends StatelessWidget {
                   crossAxisCount: 3,
                   crossAxisSpacing: 20,
                   mainAxisSpacing: 20,
-                  childAspectRatio: 0.75,
+                  childAspectRatio: 0.52,
                 ),
                 itemCount: decks.length,
                 itemBuilder: (context, index) {
@@ -60,11 +62,22 @@ class DeckPickerPage extends StatelessWidget {
                       onDeckSelected(deck);
                       Navigator.of(context).pop();
                     },
-                    onLongPress: () {},
+                    onLongPress: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => FullScreenImagePage(
+                            imagePathOrUrl: deck.imageUrl ?? deck.avatarUrl,
+                            assetFallback: AppConstants.defaultDeckImageAsset,
+                          ),
+                        ),
+                      );
+                    },
                   );
                 },
               ),
             ),
     );
   }
+
 }
