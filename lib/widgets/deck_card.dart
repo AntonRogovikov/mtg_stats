@@ -47,8 +47,8 @@ class DeckCard extends StatelessWidget {
                   ),
                 ),
                 child: Container(
-                  width: 130,
-                  height: 182,
+                  width: 100,
+                  height: 140,
                   decoration: BoxDecoration(
                     color: isDisabled ? Colors.grey[400] : null,
                     borderRadius: BorderRadius.circular(6),
