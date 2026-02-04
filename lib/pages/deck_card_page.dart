@@ -238,46 +238,52 @@ class _DeckCardPageState extends State<DeckCardPage> {
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final screenSize = MediaQuery.sizeOf(context);
+                      final scaffoldBg = Theme.of(context).scaffoldBackgroundColor;
                       const padding = 24.0 * 2;
-                      const maxWidthFraction = 0.92;
-                      const maxHeightFraction = 0.45;
+                      const maxWidthFraction = 0.96;
+                      const maxHeightFraction = 0.58;
                       final maxW = (screenSize.width - padding) * maxWidthFraction;
                       final maxH = (screenSize.height - padding) * maxHeightFraction;
-                      final w = (maxW > 0 && maxW < double.infinity) ? maxW : 320.0;
-                      final h = (maxH > 0 && maxH < double.infinity) ? maxH : 440.0;
-                      final size = Size(w, h);
+                      // Пропорции карты MTG ~ 63:88 — контейнер подстраивается под них,
+                      // чтобы не было серых полос по бокам при BoxFit.contain.
+                      const cardAspect = 63.0 / 88.0;
+                      double w = maxW;
+                      double h = w / cardAspect;
+                      if (h > maxH) {
+                        h = maxH;
+                        w = h * cardAspect;
+                      }
                       return GestureDetector(
                         onLongPress: _openFullScreenImage,
-                        child: SizedBox(
-                          width: size.width,
-                          height: size.height,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Colors.black26,
-                                  blurRadius: 8,
-                                  offset: Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                _buildDeckImage(),
-                                if (_isUploading || _isDeleting)
-                                  const Positioned.fill(
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(color: Colors.black38),
-                                      child: Center(
-                                        child: CircularProgressIndicator(color: Colors.white),
-                                      ),
+                        child: Container(
+                          width: w,
+                          height: h,
+                          decoration: BoxDecoration(
+                            color: scaffoldBg,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black26,
+                                blurRadius: 8,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              _buildDeckImage(),
+                              if (_isUploading || _isDeleting)
+                                const Positioned.fill(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(color: Colors.black38),
+                                    child: Center(
+                                      child: CircularProgressIndicator(color: Colors.white),
                                     ),
                                   ),
-                              ],
-                            ),
+                                ),
+                            ],
                           ),
                         ),
                       );

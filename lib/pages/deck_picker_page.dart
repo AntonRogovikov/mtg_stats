@@ -41,41 +41,41 @@ class DeckPickerPage extends StatelessWidget {
           : Padding(
               padding: const EdgeInsets.all(20.0),
               child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 20,
-                  mainAxisSpacing: 20,
-                  childAspectRatio: 0.52,
-                ),
-                itemCount: decks.length,
-                itemBuilder: (context, index) {
-                  final deck = decks[index];
-                  final isSelected = selectedDeck?.id == deck.id;
-                  final isDisabled = disabledDeckIds.contains(deck.id);
-                  return DeckCard(
-                    deck: deck,
-                    isSelected: isSelected,
-                    isDisabled: isDisabled,
-                    onTap: isDisabled
-                        ? () {}
-                        : () {
-                      onDeckSelected(deck);
-                      Navigator.of(context).pop();
-                    },
-                    onLongPress: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => FullScreenImagePage(
-                            imagePathOrUrl: deck.imageUrl ?? deck.avatarUrl,
-                            assetFallback: AppConstants.defaultDeckImageAsset,
+                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 180,
+                    crossAxisSpacing: 20,
+                    mainAxisSpacing: 10,
+                    childAspectRatio: 0.63,
+                  ),
+                  itemCount: decks.length,
+                  itemBuilder: (context, index) {
+                    final deck = decks[index];
+                    final isSelected = selectedDeck?.id == deck.id;
+                    final isDisabled = disabledDeckIds.contains(deck.id);
+                    return DeckCard(
+                      deck: deck,
+                      isSelected: isSelected,
+                      isDisabled: isDisabled,
+                      onTap: isDisabled
+                          ? () {}
+                          : () {
+                        onDeckSelected(deck);
+                        Navigator.of(context).pop();
+                      },
+                      onLongPress: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => FullScreenImagePage(
+                              imagePathOrUrl: deck.imageUrl ?? deck.avatarUrl,
+                              assetFallback: AppConstants.defaultDeckImageAsset,
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
+                        );
+                      },
+                    );
+                  },
+                ),
             ),
     );
   }

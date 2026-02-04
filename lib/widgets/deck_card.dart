@@ -130,7 +130,8 @@ class DeckCard extends StatelessWidget {
                     height: textHeight,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Center(
+                      child: Align(
+                        alignment: Alignment.topCenter,
                         child: Text(
                           deck.name,
                           style: TextStyle(
