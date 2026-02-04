@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/core/constants.dart';
 import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/services/game_manager.dart';
 import 'package:mtg_stats/services/game_service.dart';
@@ -17,13 +19,18 @@ class ActiveGamePage extends StatefulWidget {
 class _ActiveGamePageState extends State<ActiveGamePage> {
   Timer? _timer;
   final GameService _gameService = GameService();
+  final AudioPlayer _turnAudioPlayer = AudioPlayer();
+  bool _soundEnabled = false;
+  String? _playingTrack; // 'turn' | 'overtime' | null
 
   @override
   void initState() {
     super.initState();
+    _turnAudioPlayer.setReleaseMode(ReleaseMode.loop);
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
         setState(() {});
+        _syncTurnMusic();
       }
     });
   }
@@ -31,7 +38,39 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
   @override
   void dispose() {
     _timer?.cancel();
+    _turnAudioPlayer.dispose();
     super.dispose();
+  }
+
+  Future<void> _syncTurnMusic() async {
+    if (!mounted) return;
+    final hasTurnLimit = GameManager.instance.turnLimitSeconds > 0;
+    final isTurnRunning = GameManager.instance.isTurnRunning;
+    final turnElapsed = GameManager.instance.currentTurnElapsed;
+    final limit = Duration(seconds: GameManager.instance.turnLimitSeconds);
+    final overtime = hasTurnLimit && turnElapsed > limit ? turnElapsed - limit : Duration.zero;
+
+    if (!hasTurnLimit || !_soundEnabled || !isTurnRunning) {
+      if (_playingTrack != null) {
+        await _turnAudioPlayer.stop();
+        if (mounted) setState(() => _playingTrack = null);
+      }
+      return;
+    }
+
+    final wantedTrack = overtime > Duration.zero ? 'overtime' : 'turn';
+    if (_playingTrack == wantedTrack) return;
+
+    await _turnAudioPlayer.stop();
+    final source = wantedTrack == 'overtime'
+        ? AssetSource(AppConstants.overtimeMusicAsset)
+        : AssetSource(AppConstants.turnMusicAsset);
+    try {
+      await _turnAudioPlayer.play(source);
+      if (mounted) setState(() => _playingTrack = wantedTrack);
+    } catch (_) {
+      if (mounted) setState(() => _playingTrack = null);
+    }
   }
 
   @override
@@ -102,12 +141,29 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Ход команды ${GameManager.instance.currentTurnTeam}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Ход команды ${GameManager.instance.currentTurnTeam}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              _soundEnabled ? Icons.volume_up : Icons.volume_off,
+                              color: _soundEnabled ? null : Colors.grey,
+                            ),
+                            tooltip: _soundEnabled ? 'Выключить музыку' : 'Включить музыку хода',
+                            onPressed: () {
+                              setState(() => _soundEnabled = !_soundEnabled);
+                              _syncTurnMusic();
+                            },
+                          ),
+                        ],
                       ),
                       if (_teamPlayers(game, GameManager.instance.currentTurnTeam).isNotEmpty)
                         Padding(

@@ -25,6 +25,9 @@ dependencies:
   # Сохранение настроек (URL бэкенда)
   shared_preferences: ^2.3.3
 
+  # Воспроизведение музыки хода / перерасхода на странице активной игры
+  audioplayers: ^6.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -33,4 +36,5 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/images/ 
+    - assets/images/
+    - assets/audio/ 
