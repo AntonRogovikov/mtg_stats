@@ -630,11 +630,11 @@ class _DeckListPageState extends State<DeckListPage> {
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: GridView.builder(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 180,
             crossAxisSpacing: 20,
             mainAxisSpacing: 10,
-            childAspectRatio: 0.61,
+            childAspectRatio: 0.63,
           ),
           itemCount: decks.length,
           itemBuilder: (context, index) {

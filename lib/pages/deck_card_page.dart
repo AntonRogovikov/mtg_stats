@@ -178,16 +178,17 @@ class _DeckCardPageState extends State<DeckCardPage> {
     );
   }
 
-  Widget _buildAvatarImage() {
-    final provider = deckImageProvider(_deck.avatarUrl);
+  Widget _buildDeckImage() {
+    final url = _deck.imageUrl ?? _deck.avatarUrl;
+    final provider = deckImageProvider(url);
     if (provider == null) {
-      return Image.asset(_defaultImageAsset, fit: BoxFit.cover);
+      return Image.asset(_defaultImageAsset, fit: BoxFit.contain);
     }
     return Image(
       image: provider,
-      fit: BoxFit.cover,
+      fit: BoxFit.contain,
       errorBuilder: (_, __, ___) =>
-          Image.asset(_defaultImageAsset, fit: BoxFit.cover),
+          Image.asset(_defaultImageAsset, fit: BoxFit.contain),
     );
   }
 
@@ -234,38 +235,53 @@ class _DeckCardPageState extends State<DeckCardPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  GestureDetector(
-                    onLongPress: _openFullScreenImage,
-                    child: Container(
-                      width: 140,
-                      height: 196,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black26,
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          _buildAvatarImage(),
-                          if (_isUploading || _isDeleting)
-                            const Positioned.fill(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(color: Colors.black38),
-                                child: Center(
-                                  child: CircularProgressIndicator(color: Colors.white),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final screenSize = MediaQuery.sizeOf(context);
+                      const padding = 24.0 * 2;
+                      const maxWidthFraction = 0.92;
+                      const maxHeightFraction = 0.45;
+                      final maxW = (screenSize.width - padding) * maxWidthFraction;
+                      final maxH = (screenSize.height - padding) * maxHeightFraction;
+                      final w = (maxW > 0 && maxW < double.infinity) ? maxW : 320.0;
+                      final h = (maxH > 0 && maxH < double.infinity) ? maxH : 440.0;
+                      final size = Size(w, h);
+                      return GestureDetector(
+                        onLongPress: _openFullScreenImage,
+                        child: SizedBox(
+                          width: size.width,
+                          height: size.height,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 8,
+                                  offset: Offset(0, 4),
                                 ),
-                              ),
+                              ],
                             ),
-                        ],
-                      ),
-                    ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                _buildDeckImage(),
+                                if (_isUploading || _isDeleting)
+                                  const Positioned.fill(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(color: Colors.black38),
+                                      child: Center(
+                                        child: CircularProgressIndicator(color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 12),
                   Row(

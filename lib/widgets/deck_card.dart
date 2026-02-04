@@ -33,93 +33,122 @@ class DeckCard extends StatelessWidget {
         child: GestureDetector(
           onTap: onTap,
           onLongPress: onLongPress,
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
-            children: [
-              Card(
-                color: isDisabled ? Colors.grey[300] : null,
-                elevation: isSelected ? 8 : 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  side: BorderSide(
-                    color: isSelected ? Colors.blue : Colors.transparent,
-                    width: isSelected ? 3 : 0,
-                  ),
-                ),
-                child: Container(
-                  width: 100,
-                  height: 140,
-                  decoration: BoxDecoration(
-                    color: isDisabled ? Colors.grey[400] : null,
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: isSelected
-                        ? const [
-                            BoxShadow(
-                              color: Color.fromRGBO(33, 150, 243, 0.5),
-                              blurRadius: 10,
-                              spreadRadius: 2,
-                            ),
-                          ]
-                        : [],
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (!isDisabled)
-                        _DeckCardImage(
-                          avatarUrl: deck.avatarUrl,
-                          defaultAsset: _defaultImageAsset,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Фиксированная область под текст (2 строки) и отступ,
+              // чтобы высота изображения оставалась одинаковой для всех карточек.
+              const double textHeight = 32.0;
+              const double spacing = 6.0;
+              final double cardHeight =
+                  (constraints.maxHeight - textHeight - spacing)
+                      .clamp(0.0, constraints.maxHeight);
+
+              return Column(
+                mainAxisSize: MainAxisSize.max,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    height: cardHeight,
+                    child: Card(
+                      color: isDisabled ? Colors.grey[300] : null,
+                      elevation: isSelected ? 8 : 3,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        side: BorderSide(
+                          color: isSelected ? Colors.blue : Colors.transparent,
+                          width: isSelected ? 3 : 0,
                         ),
-                      if (isSelected)
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: Colors.blue,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.check, color: Colors.white, size: 16),
-                          ),
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isDisabled ? Colors.grey[400] : null,
+                          borderRadius: BorderRadius.circular(6),
+                          boxShadow: isSelected
+                              ? const [
+                                  BoxShadow(
+                                    color: Color.fromRGBO(33, 150, 243, 0.5),
+                                    blurRadius: 10,
+                                    spreadRadius: 2,
+                                  ),
+                                ]
+                              : [],
                         ),
-                      if (onMenuTap != null && !isDisabled)
-                        Positioned(
-                          top: 4,
-                          left: 4,
-                          child: Material(
-                            color: Colors.black38,
-                            borderRadius: BorderRadius.circular(4),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(4),
-                              onTap: onMenuTap,
-                              child: const Padding(
-                                padding: EdgeInsets.all(4),
-                                child: Icon(Icons.more_vert, color: Colors.white, size: 20),
+                        clipBehavior: Clip.antiAlias,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            if (!isDisabled)
+                              _DeckCardImage(
+                                avatarUrl: deck.avatarUrl,
+                                defaultAsset: _defaultImageAsset,
                               ),
-                            ),
-                          ),
+                            if (isSelected)
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.blue,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.check,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ),
+                              ),
+                            if (onMenuTap != null && !isDisabled)
+                              Positioned(
+                                top: 4,
+                                left: 4,
+                                child: Material(
+                                  color: Colors.black38,
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(4),
+                                    onTap: onMenuTap,
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(4),
+                                      child: Icon(
+                                        Icons.more_vert,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                    ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              SizedBox(
-                width: 130,
-                child: Text(
-                  deck.name,
-                  style: TextStyle(
-                    color: isDisabled ? Colors.grey[700] : Colors.black,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+                  //const SizedBox(height: spacing),
+                  SizedBox(
+                    height: textHeight,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Center(
+                        child: Text(
+                          deck.name,
+                          style: TextStyle(
+                            color:
+                                isDisabled ? Colors.grey[700] : Colors.black,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
                   ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),
