@@ -4,6 +4,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/core/constants.dart';
+import 'package:mtg_stats/core/platform_utils.dart';
 import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/services/game_manager.dart';
 import 'package:mtg_stats/services/game_service.dart';
@@ -22,6 +23,9 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
   final AudioPlayer _turnAudioPlayer = AudioPlayer();
   bool _soundEnabled = false;
   String? _playingTrack; // 'turn' | 'overtime' | null
+  /// На iOS Web переключение на музыку перерасхода без жеста блокируется.
+  /// Показываем кнопку «Включить музыку перерасхода», по нажатию запускаем трек.
+  bool _overtimeMusicPending = false;
 
   @override
   void initState() {
@@ -53,13 +57,30 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     if (!hasTurnLimit || !_soundEnabled || !isTurnRunning) {
       if (_playingTrack != null) {
         await _turnAudioPlayer.stop();
-        if (mounted) setState(() => _playingTrack = null);
+        if (mounted) {
+          setState(() {
+            _playingTrack = null;
+            _overtimeMusicPending = false;
+          });
+        }
       }
       return;
     }
 
     final wantedTrack = overtime > Duration.zero ? 'overtime' : 'turn';
-    if (_playingTrack == wantedTrack) return;
+    if (_playingTrack == wantedTrack) {
+      if (wantedTrack == 'turn') {
+        _overtimeMusicPending = false;
+      }
+      return;
+    }
+
+    if (wantedTrack == 'overtime' && isIOSWeb) {
+      if (!_overtimeMusicPending && mounted) {
+        setState(() => _overtimeMusicPending = true);
+      }
+      return;
+    }
 
     await _turnAudioPlayer.stop();
     final source = wantedTrack == 'overtime'
@@ -67,9 +88,33 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
         : AssetSource(AppConstants.turnMusicAsset);
     try {
       await _turnAudioPlayer.play(source);
-      if (mounted) setState(() => _playingTrack = wantedTrack);
+      if (mounted) {
+        setState(() {
+          _playingTrack = wantedTrack;
+          _overtimeMusicPending = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() => _playingTrack = null);
+      if (mounted) {
+        setState(() => _playingTrack = null);
+      }
+    }
+  }
+
+  Future<void> _playOvertimeMusicFromGesture() async {
+    await _turnAudioPlayer.stop();
+    try {
+      await _turnAudioPlayer.play(AssetSource(AppConstants.overtimeMusicAsset));
+      if (mounted) {
+        setState(() {
+          _playingTrack = 'overtime';
+          _overtimeMusicPending = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _playingTrack = null);
+      }
     }
   }
 
@@ -90,6 +135,13 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     final limit = Duration(seconds: GameManager.instance.turnLimitSeconds);
     final overtime =
         hasTurnLimit && turnElapsed > limit ? turnElapsed - limit : Duration.zero;
+    final isOvertime = overtime > Duration.zero;
+    // Для отображения таймера хода:
+    // - пока нет перерасхода: считаем от лимита вниз до 0;
+    // - при перерасходе: считаем от 00:00 вверх.
+    final displayTurn = hasTurnLimit
+        ? (isOvertime ? overtime : limit - turnElapsed)
+        : turnElapsed;
 
     return PopScope(
       canPop: false,
@@ -179,35 +231,38 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                       const SizedBox(height: 8),
                       Center(
                         child: Text(
-                          _formatDuration(turnElapsed),
+                          _formatDuration(displayTurn),
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
-                            color: overtime > Duration.zero
-                                ? Colors.red
-                                : Colors.black,
+                            color: isOvertime ? Colors.red : Colors.black,
                           ),
                         ),
                       ),
                       const SizedBox(height: 8),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisAlignment: MainAxisAlignment.start,
                         children: [
                           Text(
                             'Лимит хода: ${_formatDuration(limit)}',
                             style: const TextStyle(fontSize: 14),
                           ),
-                          Text(
-                            'Перерасход: ${_formatDuration(overtime)}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: overtime > Duration.zero
-                                  ? Colors.red
-                                  : Colors.grey[700],
-                            ),
-                          ),
                         ],
                       ),
+                      if (_overtimeMusicPending) ...[
+                        const SizedBox(height: 10),
+                        Center(
+                          child: OutlinedButton.icon(
+                            onPressed: _playOvertimeMusicFromGesture,
+                            icon: const Icon(Icons.music_note, size: 20),
+                            label: const Text('Включить музыку перерасхода'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red[700],
+                              side: BorderSide(color: Colors.red[700]!),
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       Center(
                         child: ElevatedButton(
