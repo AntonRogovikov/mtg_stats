@@ -69,6 +69,7 @@ class _StatsPageState extends State<StatsPage> {
       appBar: AppBar(
         title: Text('Статистика', style: AppTheme.appBarTitle),
         backgroundColor: AppTheme.appBarBackground,
+        foregroundColor: AppTheme.appBarForeground,
         actions: [
           PopupMenuButton<StatsViewMode>(
             icon: Icon(

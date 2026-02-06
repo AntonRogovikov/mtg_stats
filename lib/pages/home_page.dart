@@ -12,6 +12,7 @@ class HomePage extends StatelessWidget {
       appBar: AppBar(
         title: Text('MTG Статистика', style: AppTheme.appBarTitle),
         backgroundColor: AppTheme.appBarBackground,
+        foregroundColor: AppTheme.appBarForeground,
         elevation: 4,
         actions: [
           IconButton(

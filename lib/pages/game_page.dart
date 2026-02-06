@@ -257,6 +257,7 @@ class _GamePageState extends State<GamePage> {
       appBar: AppBar(
         title: Text('Новая партия', style: AppTheme.appBarTitle),
         backgroundColor: AppTheme.appBarBackground,
+        foregroundColor: AppTheme.appBarForeground,
         elevation: 4,
       ),
       body: SingleChildScrollView(

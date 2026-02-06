@@ -395,6 +395,7 @@ class _DeckListPageState extends State<DeckListPage> {
       appBar: AppBar(
         title: Text('Колоды', style: AppTheme.appBarTitle),
         backgroundColor: AppTheme.appBarBackground,
+        foregroundColor: AppTheme.appBarForeground,
         elevation: 4,
         actions: [
           IconButton(
