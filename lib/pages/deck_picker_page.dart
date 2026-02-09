@@ -53,6 +53,7 @@ class DeckPickerPage extends StatelessWidget {
                     final isSelected = selectedDeck?.id == deck.id;
                     final isDisabled = disabledDeckIds.contains(deck.id);
                     return DeckCard(
+                      key: ValueKey<int>(deck.id),
                       deck: deck,
                       isSelected: isSelected,
                       isDisabled: isDisabled,

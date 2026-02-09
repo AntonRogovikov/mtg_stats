@@ -26,16 +26,32 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
   /// На iOS Web переключение на музыку перерасхода без жеста блокируется.
   /// Показываем кнопку «Включить музыку перерасхода», по нажатию запускаем трек.
   bool _overtimeMusicPending = false;
+  int _lastTotalSeconds = -1;
+  int _lastDisplayTurnSeconds = -1;
 
   @override
   void initState() {
     super.initState();
     _turnAudioPlayer.setReleaseMode(ReleaseMode.loop);
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
+      if (!mounted) return;
+      final game = GameManager.instance.activeGame;
+      if (game == null) return;
+      final hasTurnLimit = GameManager.instance.turnLimitSeconds > 0;
+      final turnElapsed = GameManager.instance.currentTurnElapsed;
+      final limit = Duration(seconds: GameManager.instance.turnLimitSeconds);
+      final overtime = hasTurnLimit && turnElapsed > limit ? turnElapsed - limit : Duration.zero;
+      final displayTurn = hasTurnLimit
+          ? (overtime > Duration.zero ? overtime : limit - turnElapsed)
+          : turnElapsed;
+      final totalSeconds = game.totalDuration.inSeconds;
+      final displayTurnSeconds = displayTurn.inSeconds;
+      if (totalSeconds != _lastTotalSeconds || displayTurnSeconds != _lastDisplayTurnSeconds) {
+        _lastTotalSeconds = totalSeconds;
+        _lastDisplayTurnSeconds = displayTurnSeconds;
         setState(() {});
-        _syncTurnMusic();
       }
+      _syncTurnMusic();
     });
   }
 
@@ -142,6 +158,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     final displayTurn = hasTurnLimit
         ? (isOvertime ? overtime : limit - turnElapsed)
         : turnElapsed;
+    final currentTurnTeamPlayers = _teamPlayers(game, GameManager.instance.currentTurnTeam);
 
     return PopScope(
       canPop: false,
@@ -217,11 +234,11 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                           ),
                         ],
                       ),
-                      if (_teamPlayers(game, GameManager.instance.currentTurnTeam).isNotEmpty)
+                      if (currentTurnTeamPlayers.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 4.0),
                           child: Text(
-                            _teamPlayers(game, GameManager.instance.currentTurnTeam).join(', '),
+                            currentTurnTeamPlayers.join(', '),
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.grey[700],

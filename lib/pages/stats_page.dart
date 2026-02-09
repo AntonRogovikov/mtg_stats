@@ -222,6 +222,7 @@ class _StatsPageState extends State<StatsPage> {
       itemBuilder: (context, index) {
         final s = list[index];
         return Card(
+          key: ValueKey<String>(s.playerName),
           margin: const EdgeInsets.only(bottom: 12),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -288,6 +289,7 @@ class _StatsPageState extends State<StatsPage> {
       itemBuilder: (context, index) {
         final s = list[index];
         return Card(
+          key: ValueKey<String>(s.deckName),
           margin: const EdgeInsets.only(bottom: 12),
           child: ListTile(
             title: Text(s.deckName),

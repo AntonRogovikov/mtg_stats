@@ -1150,6 +1150,7 @@ class _GamePageState extends State<GamePage> {
       );
     }
 
+    final userById = {for (final u in _users) u.id: u};
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1165,11 +1166,10 @@ class _GamePageState extends State<GamePage> {
           spacing: 8,
           runSpacing: 4,
           children: _userDecks.entries.map((entry) {
-            final user = _users.firstWhere((u) => u.id == entry.key,
-                orElse: () => _users.first);
+            final userName = userById[entry.key]?.name ?? '?';
             final deck = entry.value;
             return Chip(
-              label: Text('${user.name}: ${deck.name}'),
+              label: Text('$userName: ${deck.name}'),
               avatar: const Icon(Icons.person, size: 16),
             );
           }).toList(),

@@ -116,14 +116,14 @@ class _DeckListPageState extends State<DeckListPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Новая колода'),
+          title: const Text('Новая колода'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameController,
                 autofocus: true,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   hintText: 'Введите название колоды',
                   border: OutlineInputBorder(),
                 ),
@@ -139,7 +139,7 @@ class _DeckListPageState extends State<DeckListPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('Отмена'),
+              child: const Text('Отмена'),
             ),
             TextButton(
               onPressed: () {
@@ -149,12 +149,12 @@ class _DeckListPageState extends State<DeckListPage> {
                   Navigator.of(context).pop();
                 }
               },
-              child: Text('Добавить'),
+              child: const Text('Добавить'),
             ),
           ],
         );
       },
-    );
+    ).then((_) => nameController.dispose());
   }
 
   void _showDeleteDeckDialog(Deck deck) {
@@ -162,21 +162,21 @@ class _DeckListPageState extends State<DeckListPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Удалить колоду'),
+          title: const Text('Удалить колоду'),
           content: Text(
             'Вы уверены, что хотите удалить колоду "${deck.name}"?',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('Отмена'),
+              child: const Text('Отмена'),
             ),
             TextButton(
               onPressed: () {
                 _deleteDeck(deck.id);
                 Navigator.of(context).pop();
               },
-              child: Text('Удалить', style: TextStyle(color: Colors.red)),
+              child: const Text('Удалить', style: TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -642,6 +642,7 @@ class _DeckListPageState extends State<DeckListPage> {
             final deck = decks[index];
             final isSelected = index == _selectedDeckIndex;
             return DeckCard(
+              key: ValueKey<int>(deck.id),
               deck: deck,
               isSelected: isSelected,
               onTap: () {
@@ -690,11 +691,12 @@ class _DeckListPageState extends State<DeckListPage> {
                       ),
                     ),
                   ).then((updated) async {
-                    if (updated != null) {
+                    if (updated != null && mounted) {
                       final index = decks.indexWhere((d) => d.id == updated.id);
                       if (index != -1) {
                         setState(() => decks[index] = updated);
                       }
+                      // Перезагрузка с сервера, чтобы подтянуть обновлённое изображение и остальные поля
                       await _getAllDecks();
                     }
                   });
@@ -722,7 +724,7 @@ class _DeckListPageState extends State<DeckListPage> {
 
   Widget _buildSelectionInfo() {
     if (_selectedDeckIndex == null || _selectedDeckIndex! >= decks.length) {
-      return SizedBox.shrink();
+      return const SizedBox.shrink();
     }
 
     final deckName = decks[_selectedDeckIndex!].name;
