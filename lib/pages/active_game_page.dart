@@ -160,6 +160,10 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
         : turnElapsed;
     final currentTurnTeamPlayers = _teamPlayers(game, GameManager.instance.currentTurnTeam);
 
+    final currentTeamName = GameManager.instance.currentTurnTeam == 1
+        ? GameManager.instance.team1Name
+        : GameManager.instance.team2Name;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Активная партия', style: AppTheme.appBarTitle),
@@ -212,7 +216,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                         children: [
                           Expanded(
                             child: Text(
-                              'Ход команды ${GameManager.instance.currentTurnTeam}',
+                              'Ход: $currentTeamName',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -390,6 +394,8 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
           title: const Text('Кто победил?'),
           content: StatefulBuilder(
             builder: (context, setState) {
+              final team1Name = GameManager.instance.team1Name;
+              final team2Name = GameManager.instance.team2Name;
               return RadioGroup<int>(
                 groupValue: selectedTeam,
                 onChanged: (value) {
@@ -400,8 +406,8 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    RadioListTile<int>(title: const Text('Команда 1'), value: 1),
-                    RadioListTile<int>(title: const Text('Команда 2'), value: 2),
+                    RadioListTile<int>(title: Text(team1Name), value: 1),
+                    RadioListTile<int>(title: Text(team2Name), value: 2),
                   ],
                 ),
               );
@@ -466,11 +472,15 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     final teamPlayers = game.players.asMap().entries.where(
           (e) => (teamNumber == 1 && e.key < half) || (teamNumber == 2 && e.key >= half),
         ).map((e) => e.value).toList();
+    final teamName = teamNumber == 1
+        ? GameManager.instance.team1Name
+        : GameManager.instance.team2Name;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Команда $teamNumber',
+          teamName,
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/core/app_theme.dart';
@@ -702,26 +703,32 @@ class _PieChartViewState extends State<_PieChartView> {
     final total = items.fold<double>(0, (s, e) => s + e.value);
     if (total <= 0) return const SizedBox.shrink();
 
-    final sections = items.asMap().entries.map((entry) {
-      final i = entry.key;
-      final item = entry.value;
-      final color = widget.colors[i % widget.colors.length];
-      final isTouched = _touchedIndex == i;
-      return PieChartSectionData(
-        value: item.value,
-        title: '${(item.value / total * 100).toStringAsFixed(0)}%',
-        color: isTouched ? color.withValues(alpha: 0.9) : color.withValues(alpha: 0.75),
-        radius: isTouched ? 58 : 52,
-        titleStyle: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
-        ),
-      );
-    }).toList();
-
     return LayoutBuilder(
       builder: (context, constraints) {
+        final maxSide = math.min(constraints.maxWidth, constraints.maxHeight);
+        // Адаптивный размер диаграммы в зависимости от размера экрана
+        final chartSize = maxSide.clamp(220.0, 420.0);
+        final baseRadius = chartSize * 0.28;
+        final touchedRadius = baseRadius * 1.15;
+
+        final sections = items.asMap().entries.map((entry) {
+          final i = entry.key;
+          final item = entry.value;
+          final color = widget.colors[i % widget.colors.length];
+          final isTouched = _touchedIndex == i;
+          return PieChartSectionData(
+            value: item.value,
+            title: '${(item.value / total * 100).toStringAsFixed(0)}%',
+            color: isTouched ? color.withValues(alpha: 0.9) : color.withValues(alpha: 0.75),
+            radius: isTouched ? touchedRadius : baseRadius,
+            titleStyle: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          );
+        }).toList();
+
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: ConstrainedBox(
@@ -741,11 +748,11 @@ class _PieChartViewState extends State<_PieChartView> {
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
-                    height: 220,
+                    height: chartSize,
                     child: PieChart(
               PieChartData(
                 sections: sections,
-                centerSpaceRadius: 24,
+                centerSpaceRadius: chartSize * 0.16,
                 pieTouchData: PieTouchData(
                   touchCallback: (event, response) {
                     setState(() {

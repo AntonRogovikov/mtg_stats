@@ -81,6 +81,9 @@ class Game {
   final int firstMoveTeam;
   final List<GamePlayer> players;
   final List<GameTurn> turns;
+  /// Произвольные названия команд (могут приходить из API).
+  String? team1Name;
+  String? team2Name;
   int? winningTeam;
   int? currentTurnTeam;
   DateTime? currentTurnStart;
@@ -93,6 +96,8 @@ class Game {
     required this.players,
     List<GameTurn>? turns,
     this.endTime,
+    this.team1Name,
+    this.team2Name,
     this.winningTeam,
     this.currentTurnTeam,
     this.currentTurnStart,
@@ -127,6 +132,8 @@ class Game {
               ?.map((e) => GameTurn.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      team1Name: json['team1_name'] as String?,
+      team2Name: json['team2_name'] as String?,
       winningTeam: json['winning_team'] as int?,
       currentTurnTeam: json['current_turn_team'] as int?,
       currentTurnStart: json['current_turn_start'] != null
@@ -143,6 +150,8 @@ class Game {
         'first_move_team': firstMoveTeam,
         'players': players.map((e) => e.toJson()).toList(),
         'turns': turns.map((e) => e.toJson()).toList(),
+        'team1_name': team1Name,
+        'team2_name': team2Name,
         'winning_team': winningTeam,
       };
 
@@ -150,6 +159,8 @@ class Game {
         'turn_limit_seconds': turnLimitSeconds,
         'first_move_team': firstMoveTeam,
         'players': players.map((e) => e.toJson()).toList(),
+        'team1_name': team1Name,
+        'team2_name': team2Name,
       };
 }
 

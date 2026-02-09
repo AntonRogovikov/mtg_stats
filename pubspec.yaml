@@ -9,8 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
-   # Добавлены для работы с HTTP API:
+  flutter_web_plugins:
+    sdk: flutter
+
+  # Добавлены для работы с HTTP API:
   http: ^1.6.0
 
   stop_watch_timer: ^3.2.2

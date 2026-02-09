@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:mtg_stats/data/fun_team_names.dart';
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/core/app_theme.dart';
@@ -45,6 +46,10 @@ class _GamePageState extends State<GamePage> {
   final List<User> _team1 = [];
   final List<User> _team2 = [];
 
+  /// Сгенерированные весёлые названия команд (null = показывать "Команда 1/2").
+  String? _team1GeneratedName;
+  String? _team2GeneratedName;
+
   bool _teamsExpanded = false;
 
   int? _firstMoveTeam;
@@ -56,12 +61,40 @@ class _GamePageState extends State<GamePage> {
   /// Пока true — показываем загрузку вместо формы, чтобы не мелькала страница настроек при редиректе на активную игру.
   bool _isCheckingActiveGame = true;
 
+  void _generateTeamName(int teamNumber) {
+    setState(() {
+      final name = getRandomTeamName(_random);
+      if (teamNumber == 1) {
+        _team1GeneratedName = name;
+      } else {
+        _team2GeneratedName = name;
+      }
+    });
+  }
+
+  void _generateBothTeamNames() {
+    setState(() {
+      _team1GeneratedName = getRandomTeamName(_random);
+      _team2GeneratedName = getRandomTeamName(_random);
+      // Чтобы названия не совпали, перегенерируем второе при совпадении.
+      while (_team1GeneratedName == _team2GeneratedName) {
+        _team2GeneratedName = getRandomTeamName(_random);
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     _selectedUserId = _users.first.id;
     _initializeSecureRandom();
     _getAllDecks();
+    // Начальные названия: случайное прилагательное + существительное.
+    _team1GeneratedName = getRandomTeamName(_random);
+    _team2GeneratedName = getRandomTeamName(_random);
+    while (_team1GeneratedName == _team2GeneratedName) {
+      _team2GeneratedName = getRandomTeamName(_random);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       if (GameManager.instance.hasActiveGame) {
@@ -238,12 +271,20 @@ class _GamePageState extends State<GamePage> {
       turnLimitSeconds: turnLimit,
       firstMoveTeam: _firstMoveTeam!,
       players: players,
+      team1Name: _team1GeneratedName,
+      team2Name: _team2GeneratedName,
     );
 
     try {
       final created = await _gameService.createGame(stubGame);
       if (!mounted) return;
       GameManager.instance.setActiveGameFromApi(created);
+      // Пробрасываем сгенерированные названия команд в менеджер игры
+      // для отображения на экране активной партии.
+      GameManager.instance.setTeamNames(
+        team1Name: _team1GeneratedName,
+        team2Name: _team2GeneratedName,
+      );
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => const ActiveGamePage(),
@@ -343,6 +384,8 @@ class _GamePageState extends State<GamePage> {
             _buildFirstMoveSection(),
             const SizedBox(height: 32),
             _buildUserDeckSelectionSection(),
+            const SizedBox(height: 32),
+            _buildTeamNameGenerationSection(),
             const SizedBox(height: 32),
             _buildTurnSettingsSection(),
           ])),
@@ -682,6 +725,85 @@ class _GamePageState extends State<GamePage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildTeamNameGenerationSection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Названия команд',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildTeamNameRow(1, _team1GeneratedName, _generateTeamName),
+            const SizedBox(height: 8),
+            _buildTeamNameRow(2, _team2GeneratedName, _generateTeamName),
+            const SizedBox(height: 8),
+            Center(
+              child: TextButton.icon(
+                onPressed: _generateBothTeamNames,
+                icon: const Icon(Icons.refresh, size: 20),
+                label: const Text('Сгенерировать оба названия'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeamNameRow(
+    int teamNumber,
+    String? currentName,
+    void Function(int) onRefresh,
+  ) {
+    final displayName = currentName ?? '—';
+    return Row(
+      children: [
+        SizedBox(
+          width: 28,
+          child: Text(
+            '$teamNumber.',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: (teamNumber == 1 ? Colors.blue : Colors.green)
+                  .withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              displayName,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+          onPressed: () => onRefresh(teamNumber),
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Новое название',
+          color: teamNumber == 1 ? Colors.blue : Colors.green,
+        ),
+      ],
     );
   }
 
