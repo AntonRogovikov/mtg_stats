@@ -53,6 +53,9 @@ class _GamePageState extends State<GamePage> {
 
   final GameService _gameService = GameService();
 
+  /// Пока true — показываем загрузку вместо формы, чтобы не мелькала страница настроек при редиректе на активную игру.
+  bool _isCheckingActiveGame = true;
+
   @override
   void initState() {
     super.initState();
@@ -62,7 +65,7 @@ class _GamePageState extends State<GamePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       if (GameManager.instance.hasActiveGame) {
-        Navigator.of(context).push(
+        Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => const ActiveGamePage(),
           ),
@@ -73,19 +76,25 @@ class _GamePageState extends State<GamePage> {
         final active = await _gameService.getActiveGame();
         if (mounted && active != null) {
           GameManager.instance.setActiveGameFromApi(active);
-          Navigator.of(context).push(
+          Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (_) => const ActiveGamePage(),
             ),
           );
-        } else if (mounted && GameManager.instance.hasActiveGame) {
-          Navigator.of(context).push(
+          return;
+        }
+        if (mounted && GameManager.instance.hasActiveGame) {
+          Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (_) => const ActiveGamePage(),
             ),
           );
+          return;
         }
       } catch (_) {}
+      if (mounted) {
+        setState(() => _isCheckingActiveGame = false);
+      }
     });
   }
 
@@ -162,7 +171,7 @@ class _GamePageState extends State<GamePage> {
 
   Future<void> _startGame() async {
     if (GameManager.instance.hasActiveGame) {
-      Navigator.of(context).push(
+      Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => const ActiveGamePage(),
         ),
@@ -235,7 +244,7 @@ class _GamePageState extends State<GamePage> {
       final created = await _gameService.createGame(stubGame);
       if (!mounted) return;
       GameManager.instance.setActiveGameFromApi(created);
-      Navigator.of(context).push(
+      Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => const ActiveGamePage(),
         ),
@@ -253,6 +262,17 @@ class _GamePageState extends State<GamePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isCheckingActiveGame) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('Новая партия', style: AppTheme.appBarTitle),
+          backgroundColor: AppTheme.appBarBackground,
+          foregroundColor: AppTheme.appBarForeground,
+          elevation: 4,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text('Новая партия', style: AppTheme.appBarTitle),

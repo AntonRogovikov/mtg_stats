@@ -160,15 +160,13 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
         : turnElapsed;
     final currentTurnTeamPlayers = _teamPlayers(game, GameManager.instance.currentTurnTeam);
 
-    return PopScope(
-      canPop: false,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text('Активная партия', style: AppTheme.appBarTitle),
-          backgroundColor: AppTheme.appBarBackground,
-          automaticallyImplyLeading: false,
-        ),
-        body: SingleChildScrollView(
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Активная партия', style: AppTheme.appBarTitle),
+        backgroundColor: AppTheme.appBarBackground,
+        automaticallyImplyLeading: true,
+      ),
+      body: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -378,8 +376,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
           ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Future<void> _finishGame(BuildContext context) async {

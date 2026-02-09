@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/pages/active_game_page.dart';
+import 'package:mtg_stats/services/game_manager.dart';
 import 'package:mtg_stats/widgets/home_button.dart';
 
 /// Главная страница приложения: навигация к партиям, статистике и колодам.
@@ -28,7 +30,17 @@ class HomePage extends StatelessWidget {
             HomeButton(
               text: 'ПАРТИИ',
               icon: Icons.sports_esports,
-              onPressed: () => Navigator.pushNamed(context, '/games'),
+              onPressed: () {
+                if (GameManager.instance.hasActiveGame) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ActiveGamePage(),
+                    ),
+                  );
+                } else {
+                  Navigator.pushNamed(context, '/games');
+                }
+              },
             ),
             const SizedBox(height: 20),
             HomeButton(
