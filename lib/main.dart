@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/pages/decks_page.dart';
 import 'package:mtg_stats/pages/game_page.dart';
@@ -10,6 +12,9 @@ import 'package:mtg_stats/widgets/responsive_web_layout.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (kIsWeb) {
+    setUrlStrategy(PathUrlStrategy());
+  }
   await ApiConfig.load();
   runApp(const MyApp());
 }

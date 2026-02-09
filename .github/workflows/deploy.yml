@@ -37,7 +37,9 @@ jobs:
         flutter clean
         flutter build web \
           --release \
-          --base-href /mtg-stats/
+          --base-href /mtg_stats/
+        # Добавляем fallback для GitHub Pages, чтобы роуты без # не ломались при прямом переходе
+        cp build/web/index.html build/web/404.html
     
     - name: Debug - Check build output
       run: |
