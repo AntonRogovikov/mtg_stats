@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/core/app_theme.dart';
@@ -32,6 +33,11 @@ class _DeckListPageState extends State<DeckListPage> {
   bool _secureInitialized = false;
   bool _isDiceSectionVisible = false;
 
+  final ScrollController _decksScrollController = ScrollController();
+  bool _isMouseScrollDragging = false;
+  double _scrollDragStartOffset = 0;
+  double _scrollDragStartPosition = 0;
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +49,7 @@ class _DeckListPageState extends State<DeckListPage> {
   @override
   void dispose() {
     _manualSumController.dispose();
+    _decksScrollController.dispose();
     super.dispose();
   }
 
@@ -399,6 +406,14 @@ class _DeckListPageState extends State<DeckListPage> {
         elevation: 4,
         actions: [
           IconButton(
+            icon: Icon(Icons.refresh, color: AppTheme.appBarForeground),
+            tooltip: 'Обновить список колод',
+            onPressed: _isLoading ? null : () async {
+              setState(() => _isLoading = true);
+              await _getAllDecks();
+            },
+          ),
+          IconButton(
             icon: Icon(
               _isDiceSectionVisible ? Icons.visibility_off : Icons.visibility,
               color: AppTheme.appBarForeground,
@@ -628,17 +643,50 @@ class _DeckListPageState extends State<DeckListPage> {
 
   Widget _buildDecksGrid() {
     return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: GridView.builder(
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 180,
-            crossAxisSpacing: 20,
-            mainAxisSpacing: 10,
-            childAspectRatio: 0.63,
-          ),
-          itemCount: decks.length,
-          itemBuilder: (context, index) {
+      child: RefreshIndicator(
+        onRefresh: _getAllDecks,
+        child: Listener(
+          onPointerDown: (PointerDownEvent e) {
+          if (e.kind == PointerDeviceKind.mouse && e.buttons == 1) {
+            setState(() {
+              _isMouseScrollDragging = true;
+              _scrollDragStartOffset = _decksScrollController.offset;
+              _scrollDragStartPosition = e.position.dy;
+            });
+          }
+        },
+        onPointerMove: (PointerMoveEvent e) {
+          if (_isMouseScrollDragging && e.kind == PointerDeviceKind.mouse) {
+            if (!_decksScrollController.hasClients) return;
+            final delta = e.position.dy - _scrollDragStartPosition;
+            _scrollDragStartPosition = e.position.dy;
+            final maxExtent = _decksScrollController.position.maxScrollExtent;
+            final newOffset = (_scrollDragStartOffset + delta)
+                .clamp(0.0, maxExtent);
+            _decksScrollController.jumpTo(newOffset);
+            _scrollDragStartOffset = newOffset;
+          }
+        },
+        onPointerUp: (PointerUpEvent e) {
+          if (e.kind == PointerDeviceKind.mouse) {
+            setState(() => _isMouseScrollDragging = false);
+          }
+        },
+        onPointerCancel: (PointerCancelEvent e) {
+          setState(() => _isMouseScrollDragging = false);
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: GridView.builder(
+            controller: _decksScrollController,
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 180,
+              crossAxisSpacing: 20,
+              mainAxisSpacing: 10,
+              childAspectRatio: 0.63,
+            ),
+            itemCount: decks.length,
+            itemBuilder: (context, index) {
             final deck = decks[index];
             final isSelected = index == _selectedDeckIndex;
             return DeckCard(
@@ -664,6 +712,8 @@ class _DeckListPageState extends State<DeckListPage> {
               onMenuTap: () => _showDeckOptions(deck),
             );
           },
+        ),
+        ),
         ),
       ),
     );
