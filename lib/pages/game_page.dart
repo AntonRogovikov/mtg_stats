@@ -1101,10 +1101,15 @@ class _GamePageState extends State<GamePage> {
       (u) => u.id == _selectedUserId,
       orElse: () => _users.first,
     );
-    final disabledDeckIds = _userDecks.entries
-        .where((e) => e.key != _selectedUserId)
-        .map((e) => e.value.id)
-        .toSet();
+    final disabledDeckIds = <int>{};
+    final disabledDeckIdToPlayerName = <int, String>{};
+    final userById = {for (final u in _users) u.id: u};
+    for (final e in _userDecks.entries) {
+      if (e.key == _selectedUserId) continue;
+      disabledDeckIds.add(e.value.id);
+      final name = userById[e.key]?.name;
+      if (name != null) disabledDeckIdToPlayerName[e.value.id] = name;
+    }
 
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -1113,6 +1118,7 @@ class _GamePageState extends State<GamePage> {
           userId: user.id,
           decks: List.from(_allDecks),
           disabledDeckIds: disabledDeckIds,
+          disabledDeckIdToPlayerName: disabledDeckIdToPlayerName,
           selectedDeck: _userDecks[_selectedUserId],
           onDeckSelected: (deck) {
             setState(() {

@@ -38,6 +38,16 @@ class _DeckListPageState extends State<DeckListPage> {
   double _scrollDragStartOffset = 0;
   double _scrollDragStartPosition = 0;
 
+  final TextEditingController _searchController = TextEditingController();
+
+  List<Deck> get _filteredDecks {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) return decks;
+    return decks
+        .where((d) => d.name.toLowerCase().contains(query))
+        .toList();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +59,7 @@ class _DeckListPageState extends State<DeckListPage> {
   @override
   void dispose() {
     _manualSumController.dispose();
+    _searchController.dispose();
     _decksScrollController.dispose();
     super.dispose();
   }
@@ -437,11 +448,22 @@ class _DeckListPageState extends State<DeckListPage> {
               children: [
                 if (_isDiceSectionVisible) _buildDiceSection(),
                 _buildDecksHeader(),
+                _buildSearchField(),
                 if (decks.isEmpty)
                   Expanded(
                     child: Center(
                       child: Text(
                         'Нет колод. Нажмите + чтобы добавить',
+                        style:
+                            const TextStyle(fontSize: 18, color: Colors.grey),
+                      ),
+                    ),
+                  )
+                else if (_filteredDecks.isEmpty)
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        'Ничего не найдено',
                         style:
                             const TextStyle(fontSize: 18, color: Colors.grey),
                       ),
@@ -455,7 +477,43 @@ class _DeckListPageState extends State<DeckListPage> {
     );
   }
 
+  Widget _buildSearchField() {
+    final hasSearch = _searchController.text.trim().isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey[300]!, width: 1)),
+      ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (_) => setState(() {}),
+        decoration: InputDecoration(
+          hintText: 'Поиск по названию колоды',
+          prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
+          suffixIcon: hasSearch
+              ? IconButton(
+                  icon: Icon(Icons.clear, color: Colors.grey[600]),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() {});
+                  },
+                )
+              : null,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey[400]!),
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          isDense: true,
+        ),
+      ),
+    );
+  }
+
   Widget _buildDecksHeader() {
+    final filteredCount = _filteredDecks.length;
+    final isSearching = _searchController.text.trim().isNotEmpty;
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       decoration: BoxDecoration(
@@ -466,7 +524,9 @@ class _DeckListPageState extends State<DeckListPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            'Всего колод: ${decks.length}',
+            isSearching
+                ? 'Найдено: $filteredCount'
+                : 'Всего колод: ${decks.length}',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -685,17 +745,19 @@ class _DeckListPageState extends State<DeckListPage> {
               mainAxisSpacing: 10,
               childAspectRatio: 0.63,
             ),
-            itemCount: decks.length,
+            itemCount: _filteredDecks.length,
             itemBuilder: (context, index) {
-            final deck = decks[index];
-            final isSelected = index == _selectedDeckIndex;
+            final deck = _filteredDecks[index];
+            final isSelected = _selectedDeckIndex != null &&
+                _selectedDeckIndex! < decks.length &&
+                decks[_selectedDeckIndex!].id == deck.id;
             return DeckCard(
               key: ValueKey<int>(deck.id),
               deck: deck,
               isSelected: isSelected,
               onTap: () {
                 setState(() {
-                  _selectedDeckIndex = index;
+                  _selectedDeckIndex = decks.indexWhere((d) => d.id == deck.id);
                 });
               },
               onLongPress: () {

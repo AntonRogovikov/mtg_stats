@@ -8,6 +8,8 @@ class DeckCard extends StatelessWidget {
   final Deck deck;
   final bool isSelected;
   final bool isDisabled;
+  /// Если задано и [isDisabled], на карточке показывается подпись «Колода выбрана игроком …».
+  final String? disabledSelectedByPlayerName;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback? onMenuTap;
@@ -17,6 +19,7 @@ class DeckCard extends StatelessWidget {
     required this.deck,
     required this.isSelected,
     this.isDisabled = false,
+    this.disabledSelectedByPlayerName,
     required this.onTap,
     required this.onLongPress,
     this.onMenuTap,
@@ -117,6 +120,37 @@ class DeckCard extends StatelessWidget {
                                         size: 20,
                                       ),
                                     ),
+                                  ),
+                                ),
+                              ),
+                            if (isDisabled &&
+                                (disabledSelectedByPlayerName?.isNotEmpty ??
+                                    false))
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black54,
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(6),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Колода выбрана игроком ${disabledSelectedByPlayerName!}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ),
