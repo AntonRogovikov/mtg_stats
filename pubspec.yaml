@@ -30,6 +30,9 @@ dependencies:
   # Воспроизведение музыки хода / перерасхода на странице активной игры
   audioplayers: ^6.0.0
 
+  # Диалоги выбора файла/пути для бэкапов
+  file_selector: ^1.0.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
