@@ -16,6 +16,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late TextEditingController _urlController;
+  late TextEditingController _tokenController;
   bool _saving = false;
   final MaintenanceService _maintenanceService = MaintenanceService();
   bool _exporting = false;
@@ -26,26 +27,30 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     _urlController = TextEditingController(text: ApiConfig.baseUrl);
+    _tokenController = TextEditingController(text: ApiConfig.apiToken);
   }
 
   @override
   void dispose() {
     _urlController.dispose();
+    _tokenController.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     final url = _urlController.text.trim();
+    final token = _tokenController.text.trim();
     setState(() => _saving = true);
     try {
       await ApiConfig.setBaseUrl(url);
+      await ApiConfig.setApiToken(token);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               url.isEmpty
                   ? 'Используется сервер по умолчанию'
-                  : 'Сервер сохранён: $url',
+                  : 'Настройки сохранены',
             ),
             backgroundColor: Colors.green,
           ),
@@ -67,6 +72,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _resetToDefault() {
     _urlController.text = ApiConfig.defaultBaseUrl;
+    _tokenController.text = '';
   }
 
   Future<bool> _showConfirmationDialog({
@@ -185,7 +191,6 @@ class _SettingsPageState extends State<SettingsPage> {
       }
     } catch (e) {
       if (mounted) {
-        print('Не удалось импортировать данные: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Не удалось импортировать данные: $e'),
@@ -274,6 +279,67 @@ class _SettingsPageState extends State<SettingsPage> {
                 fillColor: Colors.grey[50],
               ),
               keyboardType: TextInputType.url,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _save(),
+            ),
+            const SizedBox(height: 12),
+             Card(
+              color: Colors.blueGrey[50],
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.blueGrey[700]),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Как подключиться к локальному серверу',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blueGrey[800],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'При сборке можно задать URL через dart-define:\n'
+                      'flutter run --dart-define=BASE_URL=http://localhost:8080',
+                      style:
+                          TextStyle(fontSize: 13, color: Colors.blueGrey[800]),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'API токен',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.blueGrey[800],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Бэкенд защищён API_TOKEN, укажите его здесь',
+              style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _tokenController,
+              decoration: InputDecoration(
+                hintText: 'Секретный токен или пусто',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                filled: true,
+                fillColor: Colors.grey[50],
+              ),
+              obscureText: true,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _save(),
             ),
@@ -418,36 +484,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
             ),
-            Card(
-              color: Colors.blueGrey[50],
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info_outline, color: Colors.blueGrey[700]),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Как подключиться к локальному серверу',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Colors.blueGrey[800],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'При сборке можно задать URL через dart-define:\n'
-                      'flutter run --dart-define=BASE_URL=http://localhost:8080',
-                      style: TextStyle(fontSize: 13, color: Colors.blueGrey[800]),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+           
           ],
         ),
       ),

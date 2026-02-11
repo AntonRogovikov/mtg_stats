@@ -10,9 +10,7 @@ class MaintenanceService {
     final uri = Uri.parse('${ApiConfig.baseUrl}/api/export/all');
     final response = await http.get(
       uri,
-      headers: const {
-        'Accept': 'application/json',
-      },
+      headers: {...ApiConfig.authHeaders, 'Accept': 'application/json'},
     );
     if (response.statusCode != 200) {
       throw Exception(
@@ -29,7 +27,8 @@ class MaintenanceService {
     final uri = Uri.parse('${ApiConfig.baseUrl}/api/import/all');
     final response = await http.post(
       uri,
-      headers: const {
+      headers: {
+        ...ApiConfig.authHeaders,
         'Content-Type': 'application/gzip',
         'Accept': 'application/json',
       },
@@ -45,7 +44,7 @@ class MaintenanceService {
   /// Полная очистка игр и ходов.
   Future<void> clearGames() async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/api/games');
-    final response = await http.delete(uri);
+    final response = await http.delete(uri, headers: ApiConfig.authHeaders);
     if (response.statusCode != 200 && response.statusCode != 204) {
       throw Exception(
         'Не удалось очистить игры: ${response.statusCode} $uri',

@@ -7,8 +7,10 @@ import 'package:mtg_stats/services/api_config.dart';
 /// API статистики: загрузка статистики игроков и колод.
 class StatsService {
   Future<List<PlayerStats>> getPlayerStats() async {
-    final response =
-        await http.get(Uri.parse('${ApiConfig.baseUrl}/api/stats/players'));
+    final response = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/stats/players'),
+      headers: ApiConfig.authHeaders,
+    );
     if (response.statusCode != 200) {
       throw Exception('Failed to load player stats: ${response.statusCode}');
     }
@@ -19,8 +21,10 @@ class StatsService {
   }
 
   Future<List<DeckStats>> getDeckStats() async {
-    final response =
-        await http.get(Uri.parse('${ApiConfig.baseUrl}/api/stats/decks'));
+    final response = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/stats/decks'),
+      headers: ApiConfig.authHeaders,
+    );
     if (response.statusCode != 200) {
       throw Exception('Failed to load deck stats: ${response.statusCode}');
     }

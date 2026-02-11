@@ -10,7 +10,7 @@ class DeckService {
     final response = await http.post(
       Uri.parse('${ApiConfig.baseUrl}/api/decks'),
       body: json.encode({'name': name}),
-      headers: {'Content-Type': 'application/json'},
+      headers: {...ApiConfig.authHeaders, 'Content-Type': 'application/json'},
     );
 
     return Deck.fromJson(json.decode(response.body));
@@ -20,7 +20,7 @@ class DeckService {
     final response = await http.put(
       Uri.parse('${ApiConfig.baseUrl}/api/decks/${deck.id}'),
       body: json.encode(deck.toJsonForUpdate()),
-      headers: {'Content-Type': 'application/json'},
+      headers: {...ApiConfig.authHeaders, 'Content-Type': 'application/json'},
     );
 
     return Deck.fromJson(json.decode(response.body));
@@ -29,6 +29,7 @@ class DeckService {
   Future<List<Deck>> getAllDecks() async {
     final response = await http.get(
       Uri.parse('${ApiConfig.baseUrl}/api/decks'),
+      headers: ApiConfig.authHeaders,
     );
 
     final List<dynamic> data = json.decode(response.body);
@@ -42,6 +43,7 @@ class DeckService {
   ) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/api/decks/${deck.id}/image');
     final request = http.MultipartRequest('POST', uri)
+      ..headers.addAll(ApiConfig.authHeaders)
       ..files.add(http.MultipartFile.fromBytes(
         'image',
         fullImageBytes,
@@ -66,6 +68,7 @@ class DeckService {
   Future<Deck> deleteDeckImage(Deck deck) async {
     final response = await http.delete(
       Uri.parse('${ApiConfig.baseUrl}/api/decks/${deck.id}/image'),
+      headers: ApiConfig.authHeaders,
     );
 
     final cleared = deck.copyWith(imageUrl: null, avatarUrl: null);
@@ -88,6 +91,7 @@ class DeckService {
   Future<void> deleteDeck(int id) async {
     final response = await http.delete(
       Uri.parse('${ApiConfig.baseUrl}/api/decks/$id'),
+      headers: ApiConfig.authHeaders,
     );
 
     if (response.statusCode != 200 && response.statusCode != 204) {
