@@ -10,7 +10,8 @@ class ApiConfig {
   static const String _keyBaseUrl = 'backend_base_url';
   static const String _keyApiToken = 'api_token';
   //static const String defaultBaseUrl =  'http://localhost:8080'; // для локальной разработки
-  static const String defaultBaseUrl = 'https://mtg-stats-backend-production-1a71.up.railway.app';
+  //static const String defaultBaseUrl = 'https://mtg-stats-backend-production-1a71.up.railway.app';
+  static const String defaultBaseUrl = 'http://104.128.132.89:8080';
   static String _baseUrl = defaultBaseUrl;
   static String _apiToken = 'a376721b-0174-4189-b3b3-0bc85efa880d';
 
