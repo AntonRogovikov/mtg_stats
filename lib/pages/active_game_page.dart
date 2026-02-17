@@ -6,6 +6,7 @@ import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/core/constants.dart';
 import 'package:mtg_stats/core/platform_utils.dart';
 import 'package:mtg_stats/models/game.dart';
+import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/services/game_manager.dart';
 import 'package:mtg_stats/services/game_service.dart';
 
@@ -136,6 +137,43 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!ApiConfig.isAdmin) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('Активная партия', style: AppTheme.appBarTitle),
+          backgroundColor: AppTheme.appBarBackground,
+          foregroundColor: AppTheme.appBarForeground,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.admin_panel_settings, size: 64, color: Colors.orange[400]),
+                const SizedBox(height: 16),
+                Text(
+                  'Требуются права администратора',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[800],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Вести активную партию могут только администраторы.',
+                  style: TextStyle(color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final game = GameManager.instance.activeGame;
 
     if (game == null) {

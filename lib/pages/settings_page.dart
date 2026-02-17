@@ -3,10 +3,14 @@ import 'dart:typed_data';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/pages/home_page.dart';
 import 'package:mtg_stats/services/api_config.dart';
+import 'package:mtg_stats/services/auth_service.dart';
+import 'package:mtg_stats/services/health_service.dart';
 import 'package:mtg_stats/services/maintenance_service.dart';
+import 'package:mtg_stats/services/user_service.dart';
 
-/// Настройки: URL бэкенда.
+/// Настройки: URL бэкенда, вход, экспорт/импорт.
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -17,24 +21,205 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   late TextEditingController _urlController;
   late TextEditingController _tokenController;
+  late TextEditingController _loginNameController;
+  late TextEditingController _loginPasswordController;
   bool _saving = false;
+  bool _loggingIn = false;
   final MaintenanceService _maintenanceService = MaintenanceService();
+  final AuthService _authService = AuthService();
   bool _exporting = false;
   bool _importing = false;
   bool _clearingGames = false;
+  bool _checkingHealth = false;
+  HealthResult? _healthResult;
+  bool _changingPassword = false;
+  final TextEditingController _newPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _urlController = TextEditingController(text: ApiConfig.baseUrl);
     _tokenController = TextEditingController(text: ApiConfig.apiToken);
+    _loginNameController = TextEditingController();
+    _loginPasswordController = TextEditingController();
   }
 
   @override
   void dispose() {
     _urlController.dispose();
     _tokenController.dispose();
+    _loginNameController.dispose();
+    _loginPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _changePassword() async {
+    final newPass = _newPasswordController.text;
+    final confirm = _confirmPasswordController.text;
+    if (newPass.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Введите новый пароль'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    if (newPass != confirm) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Пароли не совпадают'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    if (newPass.length < 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Пароль должен быть не менее 4 символов'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    final userId = ApiConfig.currentUserId;
+    if (userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ошибка: ID пользователя не найден'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    setState(() => _changingPassword = true);
+    try {
+      await UserService().updateUser(
+        userId,
+        ApiConfig.currentUserName,
+        password: newPass,
+      );
+      if (mounted) {
+        _newPasswordController.clear();
+        _confirmPasswordController.clear();
+        setState(() => _changingPassword = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Пароль успешно изменён'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _changingPassword = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _login() async {
+    final name = _loginNameController.text.trim();
+    final password = _loginPasswordController.text;
+    if (name.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Введите имя и пароль'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    setState(() => _loggingIn = true);
+    try {
+      final result = await _authService.login(name, password);
+      await ApiConfig.setJwt(
+        result.token,
+        userId: result.userId,
+        userName: result.userName,
+        isAdmin: result.isAdmin,
+      );
+      if (mounted) {
+        setState(() => _loggingIn = false);
+        _loginPasswordController.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.isAdmin
+                  ? 'Вход выполнен: ${result.userName} (админ)'
+                  : 'Вход выполнен: ${result.userName}',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const HomePage()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loggingIn = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка входа: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _checkHealth() async {
+    setState(() {
+      _checkingHealth = true;
+      _healthResult = null;
+    });
+    try {
+      final result = await HealthService().check();
+      if (mounted) {
+        setState(() {
+          _checkingHealth = false;
+          _healthResult = result;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _checkingHealth = false;
+          _healthResult = HealthResult(
+            ok: false,
+            status: 'error',
+            error: e.toString(),
+          );
+        });
+      }
+    }
+  }
+
+  Future<void> _logout() async {
+    await ApiConfig.clearJwt();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Вы вышли из учётной записи'),
+          backgroundColor: Colors.grey,
+        ),
+      );
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomePage()),
+        (route) => false,
+      );
+    }
   }
 
   Future<void> _save() async {
@@ -119,6 +304,7 @@ class _SettingsPageState extends State<SettingsPage> {
         XTypeGroup(
           label: 'GZIP архивы',
           extensions: ['gz'],
+          mimeTypes: ['application/gzip', 'application/x-gzip'],
         ),
       ],
     );
@@ -172,6 +358,7 @@ class _SettingsPageState extends State<SettingsPage> {
         XTypeGroup(
           label: 'GZIP архивы',
           extensions: ['gz'],
+          mimeTypes: ['application/gzip', 'application/x-gzip'],
         ),
       ],
     );
@@ -203,6 +390,171 @@ class _SettingsPageState extends State<SettingsPage> {
         setState(() => _importing = false);
       }
     }
+  }
+
+  Widget _buildLoginSection() {
+    if (ApiConfig.isLoggedIn) {
+      return Card(
+        color: Colors.green[50],
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.person, color: Colors.green[800]),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Вы вошли как ${ApiConfig.currentUserName}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.green[900],
+                    ),
+                  ),
+                  if (ApiConfig.isAdmin) ...[
+                    const SizedBox(width: 8),
+                    Chip(
+                      label: const Text('Админ', style: TextStyle(fontSize: 12)),
+                      backgroundColor: Colors.amber[100],
+                      padding: EdgeInsets.zero,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Сменить пароль',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _newPasswordController,
+                decoration: const InputDecoration(
+                  labelText: 'Новый пароль',
+                  border: OutlineInputBorder(),
+                  filled: true,
+                ),
+                obscureText: true,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _confirmPasswordController,
+                decoration: const InputDecoration(
+                  labelText: 'Подтвердите пароль',
+                  border: OutlineInputBorder(),
+                  filled: true,
+                ),
+                obscureText: true,
+                onSubmitted: (_) => _changePassword(),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: _changingPassword ? null : _changePassword,
+                icon: _changingPassword
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.lock, size: 18),
+                label: Text(_changingPassword ? 'Сохранение...' : 'Сменить пароль'),
+              ),
+              const SizedBox(height: 16),
+              if (ApiConfig.isAdmin)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.pushNamed(context, '/users'),
+                    icon: const Icon(Icons.people, size: 18),
+                    label: const Text('Управление пользователями'),
+                  ),
+                ),
+              OutlinedButton.icon(
+                onPressed: _logout,
+                icon: const Icon(Icons.logout, size: 18),
+                label: const Text('Выйти'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red[700],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Вход в учётную запись',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.blueGrey[800],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Войдите под учётной записью администратора для доступа ко всем настройкам',
+              style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _loginNameController,
+              decoration: InputDecoration(
+                labelText: 'Имя',
+                hintText: 'Имя пользователя',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                filled: true,
+                fillColor: Colors.grey[50],
+              ),
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _loginPasswordController,
+              decoration: InputDecoration(
+                labelText: 'Пароль',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                filled: true,
+                fillColor: Colors.grey[50],
+              ),
+              obscureText: true,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _login(),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: _loggingIn ? null : _login,
+              icon: _loggingIn
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.login, size: 18),
+              label: Text(_loggingIn ? 'Вход...' : 'Войти'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueGrey[800],
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _clearGames() async {
@@ -254,6 +606,9 @@ class _SettingsPageState extends State<SettingsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            _buildLoginSection(),
+            if (ApiConfig.isAdmin) ...[
+            const SizedBox(height: 24),
             Text(
               'URL сервера бэкенда',
               style: TextStyle(
@@ -314,6 +669,87 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _checkingHealth ? null : _checkHealth,
+                  icon: _checkingHealth
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.health_and_safety, size: 18),
+                  label: Text(
+                    _checkingHealth ? 'Проверка...' : 'Проверить подключение',
+                  ),
+                ),
+              ],
+            ),
+            if (_healthResult != null) ...[
+              const SizedBox(height: 12),
+              Card(
+                color: _healthResult!.ok
+                    ? Colors.green[50]
+                    : Colors.red[50],
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            _healthResult!.ok
+                                ? Icons.check_circle
+                                : Icons.error,
+                            color: _healthResult!.ok
+                                ? Colors.green[700]
+                                : Colors.red[700],
+                            size: 24,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _healthResult!.ok
+                                ? 'Сервер доступен'
+                                : 'Ошибка подключения',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: _healthResult!.ok
+                                  ? Colors.green[800]
+                                  : Colors.red[800],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_healthResult!.database != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            'База данных: ${_healthResult!.database}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ),
+                      if (_healthResult!.error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            _healthResult!.error!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.red[800],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             Text(
               'API токен',
@@ -484,7 +920,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
             ),
-           
+            ],
           ],
         ),
       ),

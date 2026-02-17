@@ -11,6 +11,8 @@ import 'package:mtg_stats/pages/deck_picker_page.dart';
 import 'package:mtg_stats/services/deck_service.dart';
 import 'package:mtg_stats/services/game_manager.dart';
 import 'package:mtg_stats/services/game_service.dart';
+import 'package:mtg_stats/services/api_config.dart';
+import 'package:mtg_stats/services/user_service.dart';
 
 /// Настройка новой партии: команды, первый ход, колоды игроков.
 class GamePage extends StatefulWidget {
@@ -21,12 +23,9 @@ class GamePage extends StatefulWidget {
 }
 
 class _GamePageState extends State<GamePage> {
-  final List<User> _users = [
-    User(id: '1', name: 'Женя Козлов'),
-    User(id: '2', name: 'Андрей Евглевский'),
-    User(id: '3', name: 'Илья Сухачев'),
-    User(id: '4', name: 'Антон Роговиков'),
-  ];
+  List<User> _users = [];
+  bool _isUsersLoading = true;
+  bool _isUsersError = false;
 
   final Random _random = Random();
   final DeckService _deckService = DeckService();
@@ -86,9 +85,9 @@ class _GamePageState extends State<GamePage> {
   @override
   void initState() {
     super.initState();
-    _selectedUserId = _users.first.id;
     _initializeSecureRandom();
     _getAllDecks();
+    _getUsers();
     // Начальные названия: случайное прилагательное + существительное.
     _team1GeneratedName = getRandomTeamName(_random);
     _team2GeneratedName = getRandomTeamName(_random);
@@ -135,6 +134,39 @@ class _GamePageState extends State<GamePage> {
   void dispose() {
     _manualSumController.dispose();
     super.dispose();
+  }
+
+  Future<void> _getUsers() async {
+    setState(() {
+      _isUsersLoading = true;
+      _isUsersError = false;
+    });
+    try {
+      final loadedUsers = await UserService().getUsers();
+      if (mounted) {
+        setState(() {
+          _users = loadedUsers;
+          _isUsersLoading = false;
+          if (_users.isNotEmpty && _selectedUserId == null) {
+            _selectedUserId = _users.first.id;
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _users = [];
+          _isUsersLoading = false;
+          _isUsersError = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ошибка при загрузке пользователей'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _getAllDecks() async {
@@ -301,8 +333,49 @@ class _GamePageState extends State<GamePage> {
     }
   }
 
+  Widget _buildAdminRequired() {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Новая партия', style: AppTheme.appBarTitle),
+        backgroundColor: AppTheme.appBarBackground,
+        foregroundColor: AppTheme.appBarForeground,
+        elevation: 4,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.admin_panel_settings, size: 64, color: Colors.orange[400]),
+              const SizedBox(height: 16),
+              Text(
+                'Требуются права администратора',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800],
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Создавать и вести партии могут только администраторы.\nВойдите под учётной записью администратора в настройках.',
+                style: TextStyle(color: Colors.grey[600]),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!ApiConfig.isAdmin) {
+      return _buildAdminRequired();
+    }
     if (_isCheckingActiveGame) {
       return Scaffold(
         appBar: AppBar(
@@ -325,6 +398,59 @@ class _GamePageState extends State<GamePage> {
           padding: const EdgeInsets.all(16.0),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (_isUsersLoading)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(width: 16),
+                      Text(
+                        'Загрузка пользователей...',
+                        style: TextStyle(color: Colors.grey[700]),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else if (_isUsersError)
+              Card(
+                color: Colors.red[50],
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Не удалось загрузить пользователей',
+                        style: TextStyle(
+                          color: Colors.red[800],
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _getUsers,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Повторить'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else if (_users.isEmpty)
+              Card(
+                color: Colors.orange[50],
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Нет пользователей. Добавьте пользователей в настройках.',
+                    style: TextStyle(color: Colors.orange[900]),
+                  ),
+                ),
+              )
+            else ...[
             Card(
               elevation: 2,
               child: Padding(
@@ -388,6 +514,7 @@ class _GamePageState extends State<GamePage> {
             _buildTeamNameGenerationSection(),
             const SizedBox(height: 32),
             _buildTurnSettingsSection(),
+            ],
           ])),
     );
   }

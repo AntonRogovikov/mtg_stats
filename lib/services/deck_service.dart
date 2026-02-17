@@ -62,7 +62,11 @@ class DeckService {
       throw Exception('Ошибка загрузки изображения: ${response.statusCode}');
     }
 
-    return Deck.fromJson(json.decode(response.body));
+    final body = json.decode(response.body) as Map<String, dynamic>;
+    final deckJson = body['deck'] as Map<String, dynamic>?;
+    return deckJson != null
+        ? Deck.fromJson(deckJson)
+        : Deck.fromJson(body);
   }
 
   Future<Deck> deleteDeckImage(Deck deck) async {
@@ -77,7 +81,12 @@ class DeckService {
     }
     if (response.statusCode == 200) {
       try {
-        return Deck.fromJson(json.decode(response.body) as Map<String, dynamic>);
+        final body =
+            json.decode(response.body) as Map<String, dynamic>;
+        final deckJson = body['deck'] as Map<String, dynamic>?;
+        return deckJson != null
+            ? Deck.fromJson(deckJson)
+            : Deck.fromJson(body);
       } catch (_) {
         return cleared;
       }
