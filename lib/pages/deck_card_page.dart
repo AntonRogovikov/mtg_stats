@@ -8,14 +8,17 @@ import 'package:mtg_stats/services/deck_image/deck_image_service.dart';
 import 'package:mtg_stats/services/deck_service.dart';
 
 /// Экран редактирования колоды: название, загрузка и удаление изображения.
+/// При readOnly=true — только просмотр (без редактирования).
 class DeckCardPage extends StatefulWidget {
   final Deck deck;
   final DeckService deckService;
+  final bool readOnly;
 
   const DeckCardPage({
     super.key,
     required this.deck,
     required this.deckService,
+    this.readOnly = false,
   });
 
   @override
@@ -194,6 +197,7 @@ class _DeckCardPageState extends State<DeckCardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final readOnly = widget.readOnly;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -205,25 +209,27 @@ class _DeckCardPageState extends State<DeckCardPage> {
         backgroundColor: AppTheme.appBarBackground,
         foregroundColor: AppTheme.appBarForeground,
         actions: [
-          if (_isSaving || _isUploading || _isDeleting)
-            const Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          if (!readOnly) ...[
+            if (_isSaving || _isUploading || _isDeleting)
+              const Padding(
+                padding: EdgeInsets.only(right: 16),
+                child: Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
                   ),
                 ),
+              )
+            else
+              TextButton(
+                onPressed: _save,
+                child: const Text('Сохранить', style: TextStyle(color: Colors.white)),
               ),
-            )
-          else
-            TextButton(
-              onPressed: _save,
-              child: const Text('Сохранить', style: TextStyle(color: Colors.white)),
-            ),
+          ],
         ],
       ),
       body: SingleChildScrollView(
@@ -289,25 +295,27 @@ class _DeckCardPageState extends State<DeckCardPage> {
                       );
                     },
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      TextButton.icon(
-                        onPressed: (_isUploading || _isDeleting) ? null : _uploadAvatar,
-                        icon: const Icon(Icons.add_photo_alternate, size: 20),
-                        label: const Text('Загрузить картинку'),
-                      ),
-                      if (_deck.imageUrl != null || _deck.avatarUrl != null) ...[
-                        const SizedBox(width: 8),
+                  if (!readOnly) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
                         TextButton.icon(
-                          onPressed: (_isUploading || _isDeleting) ? null : _deleteImage,
-                          icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                          label: const Text('Удалить картинку', style: TextStyle(color: Colors.red)),
+                          onPressed: (_isUploading || _isDeleting) ? null : _uploadAvatar,
+                          icon: const Icon(Icons.add_photo_alternate, size: 20),
+                          label: const Text('Загрузить картинку'),
                         ),
+                        if (_deck.imageUrl != null || _deck.avatarUrl != null) ...[
+                          const SizedBox(width: 8),
+                          TextButton.icon(
+                            onPressed: (_isUploading || _isDeleting) ? null : _deleteImage,
+                            icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                            label: const Text('Удалить картинку', style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -323,16 +331,17 @@ class _DeckCardPageState extends State<DeckCardPage> {
             const SizedBox(height: 8),
             TextField(
               controller: _nameController,
+              readOnly: readOnly,
               decoration: InputDecoration(
-                hintText: 'Введите название',
+                hintText: readOnly ? '' : 'Введите название',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
                 filled: true,
-                fillColor: Colors.grey[50],
+                fillColor: readOnly ? Colors.grey[100] : Colors.grey[50],
               ),
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _save(),
+              textInputAction: readOnly ? null : TextInputAction.done,
+              onSubmitted: readOnly ? null : (_) => _save(),
             ),
           ],
         ),

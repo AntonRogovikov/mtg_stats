@@ -7,6 +7,7 @@ import 'package:mtg_stats/core/constants.dart';
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/pages/deck_card_page.dart';
 import 'package:mtg_stats/pages/full_screen_image_page.dart';
+import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/services/deck_service.dart';
 import 'package:mtg_stats/widgets/deck_card.dart';
 
@@ -437,11 +438,13 @@ class _DeckListPageState extends State<DeckListPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addDeckDialog,
-        backgroundColor: Colors.deepPurple,
-        child: Icon(Icons.add, color: Colors.white),
-      ),
+      floatingActionButton: ApiConfig.isAdmin
+          ? FloatingActionButton(
+              onPressed: _addDeckDialog,
+              backgroundColor: Colors.deepPurple,
+              child: Icon(Icons.add, color: Colors.white),
+            )
+          : null,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
@@ -453,7 +456,9 @@ class _DeckListPageState extends State<DeckListPage> {
                   Expanded(
                     child: Center(
                       child: Text(
-                        'Нет колод. Нажмите + чтобы добавить',
+                        ApiConfig.isAdmin
+                    ? 'Нет колод. Нажмите + чтобы добавить'
+                    : 'Нет колод',
                         style:
                             const TextStyle(fontSize: 18, color: Colors.grey),
                       ),
@@ -800,6 +805,7 @@ class _DeckListPageState extends State<DeckListPage> {
                       builder: (context) => DeckCardPage(
                         deck: deck,
                         deckService: _deckService,
+                        readOnly: !ApiConfig.isAdmin,
                       ),
                     ),
                   ).then((updated) async {
@@ -814,14 +820,15 @@ class _DeckListPageState extends State<DeckListPage> {
                   });
                 },
               ),
-              ListTile(
-                leading: Icon(Icons.delete, color: Colors.red),
-                title: Text('Удалить'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showDeleteDeckDialog(deck);
-                },
-              ),
+              if (ApiConfig.isAdmin)
+                ListTile(
+                  leading: Icon(Icons.delete, color: Colors.red),
+                  title: Text('Удалить'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showDeleteDeckDialog(deck);
+                  },
+                ),
               ListTile(
                 leading: Icon(Icons.close),
                 title: Text('Отмена'),
