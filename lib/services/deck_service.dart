@@ -26,6 +26,24 @@ class DeckService {
     return Deck.fromJson(json.decode(response.body));
   }
 
+  Future<Deck?> getDeckById(int id) async {
+    if (id <= 0) return null;
+    final response = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/decks/$id'),
+      headers: ApiConfig.authHeaders,
+    );
+    if (response.statusCode != 200) return null;
+    try {
+      final body = json.decode(response.body);
+      final deckJson = body is Map && body['deck'] != null
+          ? body['deck'] as Map<String, dynamic>
+          : body as Map<String, dynamic>;
+      return Deck.fromJson(deckJson);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<List<Deck>> getAllDecks() async {
     final response = await http.get(
       Uri.parse('${ApiConfig.baseUrl}/api/decks'),

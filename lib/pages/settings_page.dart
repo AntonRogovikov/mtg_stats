@@ -8,7 +8,6 @@ import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/services/auth_service.dart';
 import 'package:mtg_stats/services/health_service.dart';
 import 'package:mtg_stats/services/maintenance_service.dart';
-import 'package:mtg_stats/services/user_service.dart';
 
 /// Настройки: URL бэкенда, вход, экспорт/импорт.
 class SettingsPage extends StatefulWidget {
@@ -32,10 +31,6 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _clearingGames = false;
   bool _checkingHealth = false;
   HealthResult? _healthResult;
-  bool _changingPassword = false;
-  final TextEditingController _newPasswordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
-
   @override
   void initState() {
     super.initState();
@@ -51,80 +46,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _tokenController.dispose();
     _loginNameController.dispose();
     _loginPasswordController.dispose();
-    _newPasswordController.dispose();
-    _confirmPasswordController.dispose();
     super.dispose();
-  }
-
-  Future<void> _changePassword() async {
-    final newPass = _newPasswordController.text;
-    final confirm = _confirmPasswordController.text;
-    if (newPass.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Введите новый пароль'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-    if (newPass != confirm) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Пароли не совпадают'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-    if (newPass.length < 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Пароль должен быть не менее 4 символов'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-    final userId = ApiConfig.currentUserId;
-    if (userId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ошибка: ID пользователя не найден'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-    setState(() => _changingPassword = true);
-    try {
-      await UserService().updateUser(
-        userId,
-        ApiConfig.currentUserName,
-        password: newPass,
-      );
-      if (mounted) {
-        _newPasswordController.clear();
-        _confirmPasswordController.clear();
-        setState(() => _changingPassword = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Пароль успешно изменён'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _changingPassword = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
   }
 
   Future<void> _login() async {
@@ -346,8 +268,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _importAll() async {
     final confirmed = await _showConfirmationDialog(
       title: 'Импорт всех данных',
-      message:
-          'Будет выполнен импорт архива с данными.\n'
+      message: 'Будет выполнен импорт архива с данными.\n'
           'Все текущие пользователи, колоды, игры и изображения будут ПОЛНОСТЬЮ ЗАМЕНЕНЫ содержимым архива.\n\n'
           'Это необратимая операция. Продолжить?',
     );
@@ -415,7 +336,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   if (ApiConfig.isAdmin) ...[
                     const SizedBox(width: 8),
                     Chip(
-                      label: const Text('Админ', style: TextStyle(fontSize: 12)),
+                      label:
+                          const Text('Админ', style: TextStyle(fontSize: 12)),
                       backgroundColor: Colors.amber[100],
                       padding: EdgeInsets.zero,
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -424,56 +346,19 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Сменить пароль',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _newPasswordController,
-                decoration: const InputDecoration(
-                  labelText: 'Новый пароль',
-                  border: OutlineInputBorder(),
-                  filled: true,
-                ),
-                obscureText: true,
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _confirmPasswordController,
-                decoration: const InputDecoration(
-                  labelText: 'Подтвердите пароль',
-                  border: OutlineInputBorder(),
-                  filled: true,
-                ),
-                obscureText: true,
-                onSubmitted: (_) => _changePassword(),
-              ),
-              const SizedBox(height: 8),
               ElevatedButton.icon(
-                onPressed: _changingPassword ? null : _changePassword,
-                icon: _changingPassword
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.lock, size: 18),
-                label: Text(_changingPassword ? 'Сохранение...' : 'Сменить пароль'),
+                onPressed: () =>
+                    Navigator.pushNamed(context, '/settings/change-password'),
+                icon: const Icon(Icons.lock, size: 18),
+                label: const Text('Сменить пароль'),
+              ),
+              if (ApiConfig.isAdmin) const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.pushNamed(context, '/users'),
+                icon: const Icon(Icons.people, size: 18),
+                label: const Text('Управление пользователями'),
               ),
               const SizedBox(height: 16),
-              if (ApiConfig.isAdmin)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: ElevatedButton.icon(
-                    onPressed: () => Navigator.pushNamed(context, '/users'),
-                    icon: const Icon(Icons.people, size: 18),
-                    label: const Text('Управление пользователями'),
-                  ),
-                ),
               OutlinedButton.icon(
                 onPressed: _logout,
                 icon: const Icon(Icons.logout, size: 18),
@@ -608,91 +493,38 @@ class _SettingsPageState extends State<SettingsPage> {
           children: [
             _buildLoginSection(),
             if (ApiConfig.isAdmin) ...[
-            const SizedBox(height: 24),
-            Text(
-              'URL сервера бэкенда',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.blueGrey[800],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Для локального сервера: http://localhost:8080',
-              style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _urlController,
-              decoration: InputDecoration(
-                hintText: 'https://... или http://localhost:PORT',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                filled: true,
-                fillColor: Colors.grey[50],
-              ),
-              keyboardType: TextInputType.url,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _save(),
-            ),
-            const SizedBox(height: 12),
-             Card(
-              color: Colors.blueGrey[50],
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info_outline, color: Colors.blueGrey[700]),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Как подключиться к локальному серверу',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Colors.blueGrey[800],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'При сборке можно задать URL через dart-define:\n'
-                      'flutter run --dart-define=BASE_URL=http://localhost:8080',
-                      style:
-                          TextStyle(fontSize: 13, color: Colors.blueGrey[800]),
-                    ),
-                  ],
+              const SizedBox(height: 24),
+              Text(
+                'URL сервера бэкенда',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blueGrey[800],
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _checkingHealth ? null : _checkHealth,
-                  icon: _checkingHealth
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.health_and_safety, size: 18),
-                  label: Text(
-                    _checkingHealth ? 'Проверка...' : 'Проверить подключение',
+              const SizedBox(height: 8),
+              Text(
+                'Для локального сервера: http://localhost:8080',
+                style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _urlController,
+                decoration: InputDecoration(
+                  hintText: 'https://... или http://localhost:PORT',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
                 ),
-              ],
-            ),
-            if (_healthResult != null) ...[
+                keyboardType: TextInputType.url,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _save(),
+              ),
               const SizedBox(height: 12),
               Card(
-                color: _healthResult!.ok
-                    ? Colors.green[50]
-                    : Colors.red[50],
+                color: Colors.blueGrey[50],
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -700,226 +532,279 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       Row(
                         children: [
-                          Icon(
-                            _healthResult!.ok
-                                ? Icons.check_circle
-                                : Icons.error,
-                            color: _healthResult!.ok
-                                ? Colors.green[700]
-                                : Colors.red[700],
-                            size: 24,
-                          ),
+                          Icon(Icons.info_outline, color: Colors.blueGrey[700]),
                           const SizedBox(width: 8),
                           Text(
-                            _healthResult!.ok
-                                ? 'Сервер доступен'
-                                : 'Ошибка подключения',
+                            'Как подключиться к локальному серверу',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: _healthResult!.ok
-                                  ? Colors.green[800]
-                                  : Colors.red[800],
+                              color: Colors.blueGrey[800],
                             ),
                           ),
                         ],
                       ),
-                      if (_healthResult!.database != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            'База данных: ${_healthResult!.database}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ),
-                      if (_healthResult!.error != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            _healthResult!.error!,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.red[800],
-                            ),
-                          ),
-                        ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'При сборке можно задать URL через dart-define:\n'
+                        'flutter run --dart-define=BASE_URL=http://localhost:8080',
+                        style: TextStyle(
+                            fontSize: 13, color: Colors.blueGrey[800]),
+                      ),
                     ],
                   ),
                 ),
               ),
-            ],
-            const SizedBox(height: 24),
-            Text(
-              'API токен',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.blueGrey[800],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Бэкенд защищён API_TOKEN, укажите его здесь',
-              style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _tokenController,
-              decoration: InputDecoration(
-                hintText: 'Секретный токен или пусто',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                filled: true,
-                fillColor: Colors.grey[50],
-              ),
-              obscureText: true,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _save(),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _saving ? null : _save,
-                    icon: _saving
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _checkingHealth ? null : _checkHealth,
+                    icon: _checkingHealth
                         ? const SizedBox(
-                            width: 20,
-                            height: 20,
+                            width: 18,
+                            height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.save, size: 20),
-                    label: Text(_saving ? 'Сохранение...' : 'Сохранить'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueGrey[800],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                        : const Icon(Icons.health_and_safety, size: 18),
+                    label: Text(
+                      _checkingHealth ? 'Проверка...' : 'Проверить подключение',
+                    ),
+                  ),
+                ],
+              ),
+              if (_healthResult != null) ...[
+                const SizedBox(height: 12),
+                Card(
+                  color: _healthResult!.ok ? Colors.green[50] : Colors.red[50],
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              _healthResult!.ok
+                                  ? Icons.check_circle
+                                  : Icons.error,
+                              color: _healthResult!.ok
+                                  ? Colors.green[700]
+                                  : Colors.red[700],
+                              size: 24,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _healthResult!.ok
+                                  ? 'Сервер доступен'
+                                  : 'Ошибка подключения',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: _healthResult!.ok
+                                    ? Colors.green[800]
+                                    : Colors.red[800],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_healthResult!.database != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'База данных: ${_healthResult!.database}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ),
+                        if (_healthResult!.error != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              _healthResult!.error!,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.red[800],
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                TextButton(
-                  onPressed: _resetToDefault,
-                  child: const Text('По умолчанию'),
-                ),
               ],
-            ),
-            const SizedBox(height: 24),
-            Card(
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Импорт / экспорт и очистка данных',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Операции ниже могут затрагивать все данные приложения. '
-                      'Перед импортом рекомендуется сделать экспорт.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[700],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: (_saving || _exporting) ? null : _exportAll,
-                        icon: _exporting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white),
-                                ),
-                              )
-                            : const Icon(Icons.file_download),
-                        label: Text(
-                          _exporting
-                              ? 'Экспортируется...'
-                              : 'Экспортировать все данные',
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.indigo[700],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: (_saving || _importing) ? null : _importAll,
-                        icon: _importing
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white),
-                                ),
-                              )
-                            : const Icon(Icons.file_upload),
-                        label: Text(
-                          _importing
-                              ? 'Импортируется...'
-                              : 'Импортировать все данные',
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange[700],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed:
-                            (_saving || _clearingGames) ? null : _clearGames,
-                        icon: _clearingGames
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white),
-                                ),
-                              )
-                            : const Icon(Icons.delete_forever),
-                        label: Text(
-                          _clearingGames
-                              ? 'Очищается...'
-                              : 'Очистить игры и ходы',
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red[700],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 24),
+              Text(
+                'API токен',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blueGrey[800],
                 ),
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                'Бэкенд защищён API_TOKEN, укажите его здесь',
+                style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _tokenController,
+                decoration: InputDecoration(
+                  hintText: 'Секретный токен или пусто',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+                obscureText: true,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _save(),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _saving ? null : _save,
+                      icon: _saving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save, size: 20),
+                      label: Text(_saving ? 'Сохранение...' : 'Сохранить'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueGrey[800],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  TextButton(
+                    onPressed: _resetToDefault,
+                    child: const Text('По умолчанию'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Card(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Импорт / экспорт и очистка данных',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Операции ниже могут затрагивать все данные приложения. '
+                        'Перед импортом рекомендуется сделать экспорт.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed:
+                              (_saving || _exporting) ? null : _exportAll,
+                          icon: _exporting
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
+                                  ),
+                                )
+                              : const Icon(Icons.file_download),
+                          label: Text(
+                            _exporting
+                                ? 'Экспортируется...'
+                                : 'Экспортировать все данные',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.indigo[700],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed:
+                              (_saving || _importing) ? null : _importAll,
+                          icon: _importing
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
+                                  ),
+                                )
+                              : const Icon(Icons.file_upload),
+                          label: Text(
+                            _importing
+                                ? 'Импортируется...'
+                                : 'Импортировать все данные',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange[700],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed:
+                              (_saving || _clearingGames) ? null : _clearGames,
+                          icon: _clearingGames
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
+                                  ),
+                                )
+                              : const Icon(Icons.delete_forever),
+                          label: Text(
+                            _clearingGames
+                                ? 'Очищается...'
+                                : 'Очистить игры и ходы',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red[700],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ],
         ),

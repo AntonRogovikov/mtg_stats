@@ -6,6 +6,7 @@ import 'package:mtg_stats/pages/decks_page.dart';
 import 'package:mtg_stats/pages/game_page.dart';
 import 'package:mtg_stats/pages/games_history_page.dart';
 import 'package:mtg_stats/pages/home_page.dart';
+import 'package:mtg_stats/pages/change_password_page.dart';
 import 'package:mtg_stats/pages/settings_page.dart';
 import 'package:mtg_stats/pages/stats_page.dart';
 import 'package:mtg_stats/pages/users_page.dart';
@@ -47,6 +48,7 @@ class MyApp extends StatelessWidget {
         '/games/history': (context) => const GamesHistoryPage(),
         '/stats': (context) => const StatsPage(),
         '/settings': (context) => const SettingsPage(),
+        '/settings/change-password': (context) => const ChangePasswordPage(),
         '/users': (context) => const UsersPage(),
       },
     );
