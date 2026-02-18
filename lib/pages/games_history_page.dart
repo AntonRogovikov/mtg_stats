@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/core/format_utils.dart';
 import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/pages/deck_card_page.dart';
 import 'package:mtg_stats/services/api_config.dart';
@@ -388,44 +389,6 @@ class GameDetailPage extends StatelessWidget {
 
   const GameDetailPage({super.key, required this.game});
 
-  static String _formatDuration(Duration d) {
-    final totalSec = d.inSeconds;
-    if (totalSec == 0) return '';
-
-    // 1 ч. и больше — формат "xx ч. xx мин." (0 мин. не выводим)
-    if (totalSec >= 3600) {
-      final hours = d.inHours;
-      final min = (totalSec % 3600) ~/ 60;
-      return min > 0 ? '$hours ч. $min мин.' : '$hours ч.';
-    }
-
-    final min = d.inMinutes;
-    final sec = totalSec % 60;
-
-    if (min > 0 && sec > 0) return '$min мин. $sec сек.';
-
-    String secWord(int n) {
-      final mod10 = n % 10;
-      final mod100 = n % 100;
-      if (mod10 == 1 && mod100 != 11) return 'секунда';
-      if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20))
-        return 'секунды';
-      return 'секунд';
-    }
-
-    String minWord(int n) {
-      final mod10 = n % 10;
-      final mod100 = n % 100;
-      if (mod10 == 1 && mod100 != 11) return 'минута';
-      if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20))
-        return 'минуты';
-      return 'минут';
-    }
-
-    if (min == 0) return '$totalSec ${secWord(totalSec)}';
-    return '$min ${minWord(min)}';
-  }
-
   static String _formatDateTime(DateTime dt) {
     return '${dt.day.toString().padLeft(2, '0')}.'
         '${dt.month.toString().padLeft(2, '0')}.'
@@ -490,7 +453,7 @@ class GameDetailPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Общее время партии: ${_formatDuration(game.totalDuration)}',
+                      'Общее время партии: ${FormatUtils.formatDurationHuman(game.totalDuration)}',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -521,7 +484,7 @@ class GameDetailPage extends StatelessWidget {
                     if (game.endTime != null) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'Начало: ${_formatDateTime(game.startTime!)}',
+                        'Начало: ${_formatDateTime(game.startTime)}',
                         style: TextStyle(color: Colors.grey[700]),
                       ),
                       const SizedBox(height: 8),
@@ -587,14 +550,14 @@ class GameDetailPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '$team1: ${_formatDuration(team1TurnDuration)}',
+                        '$team1: ${FormatUtils.formatDurationHuman(team1TurnDuration)}',
                         style: TextStyle(
                           color: _team1Color[800],
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       Text(
-                        '$team2: ${_formatDuration(team2TurnDuration)}',
+                        '$team2: ${FormatUtils.formatDurationHuman(team2TurnDuration)}',
                         style: TextStyle(
                           color: _team2Color[800],
                           fontWeight: FontWeight.w600,
@@ -613,7 +576,7 @@ class GameDetailPage extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         game.turnLimitSeconds > 0
-                            ? 'Лимит хода: ${_formatDuration(Duration(seconds: game.turnLimitSeconds))}'
+                            ? 'Лимит хода: ${FormatUtils.formatDurationHuman(Duration(seconds: game.turnLimitSeconds))}'
                             : 'Без ограничения времени на ход',
                         style: TextStyle(
                           fontSize: 14,
@@ -658,12 +621,12 @@ class GameDetailPage extends StatelessWidget {
                                       ),
                                       TextSpan(
                                         text:
-                                            ' — ${_formatDuration(t.duration)}',
+                                            ' — ${FormatUtils.formatDurationHuman(t.duration)}',
                                       ),
                                       if (t.overtime.inSeconds > 0)
                                         TextSpan(
                                           text:
-                                              ' (+${_formatDuration(t.overtime)})',
+                                              ' (+${FormatUtils.formatDurationHuman(t.overtime)})',
                                           style: const TextStyle(
                                             color: Colors.red,
                                             fontWeight: FontWeight.w500,

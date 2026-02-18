@@ -1,9 +1,8 @@
-import 'dart:math' as math;
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/models/stats.dart';
 import 'package:mtg_stats/services/stats_service.dart';
+import 'package:mtg_stats/widgets/stats/stats.dart';
 
 enum StatsViewMode { list, histogram, pie, podium }
 
@@ -315,10 +314,10 @@ class _StatsPageState extends State<StatsPage> {
         ),
       );
     }
-    return _HistogramBar(
+    return StatsHistogramBar(
       title: '% побед',
       items: list
-          .map((s) => _HistogramItem(
+          .map((s) => StatsHistogramItem(
                 label: s.playerName,
                 value: s.winPercent,
                 tooltipLines: [
@@ -346,10 +345,10 @@ class _StatsPageState extends State<StatsPage> {
         ),
       );
     }
-    return _HistogramBar(
+    return StatsHistogramBar(
       title: '% побед',
       items: list
-          .map((s) => _HistogramItem(
+          .map((s) => StatsHistogramItem(
                 label: s.deckName,
                 value: s.winPercent,
                 tooltipLines: [
@@ -365,15 +364,6 @@ class _StatsPageState extends State<StatsPage> {
       axisIcon: Icons.style,
     );
   }
-
-  static const List<Color> _pieColors = [
-    Color(0xFF5C6BC0),
-    Color(0xFF26A69A),
-    Color(0xFFEF5350),
-    Color(0xFFFFA726),
-    Color(0xFFAB47BC),
-    Color(0xFF66BB6A),
-  ];
 
   Widget _buildPlayerPie() {
     final list = _playerStats ?? [];
@@ -396,16 +386,16 @@ class _StatsPageState extends State<StatsPage> {
         ),
       );
     }
-    return _PieChartView(
+    return StatsPieChartView(
       title: 'Доля побед по игрокам',
       items: list
-          .map((s) => _PieItem(
+          .map((s) => StatsPieItem(
                 label: s.playerName,
                 value: s.winsCount.toDouble(),
                 tooltip: '${s.playerName}\n${s.winsCount} побед (${s.winPercent.toStringAsFixed(1)}%)',
               ))
           .toList(),
-      colors: _pieColors,
+      colors: statsPieDefaultColors,
     );
   }
 
@@ -430,16 +420,16 @@ class _StatsPageState extends State<StatsPage> {
         ),
       );
     }
-    return _PieChartView(
+    return StatsPieChartView(
       title: 'Доля побед по колодам',
       items: list
-          .map((s) => _PieItem(
+          .map((s) => StatsPieItem(
                 label: s.deckName,
                 value: s.winsCount.toDouble(),
                 tooltip: '${s.deckName}\n${s.winsCount} побед (${s.winPercent.toStringAsFixed(1)}%)',
               ))
           .toList(),
-      colors: _pieColors,
+      colors: statsPieDefaultColors,
     );
   }
 
@@ -454,10 +444,10 @@ class _StatsPageState extends State<StatsPage> {
         ),
       );
     }
-    return _PodiumView(
+    return StatsPodiumView(
       title: 'Топ игроков',
       items: list
-          .map((s) => _PodiumItem(
+          .map((s) => StatsPodiumItem(
                 label: s.playerName,
                 value: s.winPercent,
                 subtitle: '${s.winsCount} / ${s.gamesCount} игр',
@@ -477,551 +467,15 @@ class _StatsPageState extends State<StatsPage> {
         ),
       );
     }
-    return _PodiumView(
+    return StatsPodiumView(
       title: 'Топ колод',
       items: list
-          .map((s) => _PodiumItem(
+          .map((s) => StatsPodiumItem(
                 label: s.deckName,
                 value: s.winPercent,
                 subtitle: '${s.winsCount} / ${s.gamesCount} игр',
               ))
           .toList(),
-    );
-  }
-}
-
-class _HistogramItem {
-  final String label;
-  final double value;
-  final List<String> tooltipLines;
-
-  _HistogramItem({
-    required this.label,
-    required this.value,
-    required this.tooltipLines,
-  });
-}
-
-class _HistogramBar extends StatefulWidget {
-  final String title;
-  final List<_HistogramItem> items;
-  final double maxY;
-  final String valueSuffix;
-  final Color barColor;
-  final IconData axisIcon;
-
-  const _HistogramBar({
-    required this.title,
-    required this.items,
-    required this.maxY,
-    required this.valueSuffix,
-    required this.barColor,
-    required this.axisIcon,
-  });
-
-  @override
-  State<_HistogramBar> createState() => _HistogramBarState();
-}
-
-class _HistogramBarState extends State<_HistogramBar> {
-  int? _touchedGroupIndex;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = widget.items;
-    if (items.isEmpty) return const SizedBox.shrink();
-
-    final maxVal = items.map((e) => e.value).fold(0.0, (a, b) => a > b ? a : b);
-    final effectiveMaxY = (maxVal > 0 ? maxVal * 1.15 : widget.maxY).clamp(1.0, widget.maxY);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight - 32),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    widget.title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 56.0 * items.length.clamp(2, 12).toDouble(),
-                    child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: effectiveMaxY,
-                barTouchData: BarTouchData(
-                  enabled: true,
-                  touchCallback: (event, response) {
-                    setState(() {
-                      _touchedGroupIndex = response?.spot?.touchedBarGroupIndex;
-                    });
-                  },
-                  touchTooltipData: BarTouchTooltipData(
-                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                      if (groupIndex >= 0 && groupIndex < items.length) {
-                        final item = items[groupIndex];
-                        return BarTooltipItem(
-                          item.tooltipLines.join('\n'),
-                          TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
-                            fontSize: 12,
-                          ),
-                        );
-                      }
-                      return null;
-                    },
-                    getTooltipColor: (_) => Colors.blueGrey[800]!,
-                    tooltipPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    tooltipMargin: 8,
-                  ),
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 32,
-                      getTitlesWidget: (value, meta) {
-                        final i = value.toInt();
-                        if (i >= 0 && i < items.length) {
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Icon(
-                              widget.axisIcon,
-                              size: 24,
-                              color: Colors.grey[700],
-                            ),
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      },
-                    ),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 32,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          '${value.toInt()}${widget.valueSuffix}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey[700],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                ),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: effectiveMaxY / 5,
-                  getDrawingHorizontalLine: (value) => FlLine(
-                    color: Colors.grey.withValues(alpha: 0.2),
-                    strokeWidth: 1,
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                barGroups: items.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final item = entry.value;
-                  final isTouched = _touchedGroupIndex == i;
-                  return BarChartGroupData(
-                    x: i,
-                    barRods: [
-                      BarChartRodData(
-                        toY: item.value.clamp(0.0, effectiveMaxY),
-                        color: isTouched
-                            ? widget.barColor.withValues(alpha: 0.8)
-                            : widget.barColor.withValues(alpha: 0.6),
-                        width: 20,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                      ),
-                    ],
-                    showingTooltipIndicators: isTouched ? [0] : [],
-                  );
-                }).toList(),
-              ),
-              duration: const Duration(milliseconds: 200),
-            ),
-          ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _PieItem {
-  final String label;
-  final double value;
-  final String tooltip;
-
-  _PieItem({required this.label, required this.value, required this.tooltip});
-}
-
-class _PieChartView extends StatefulWidget {
-  final String title;
-  final List<_PieItem> items;
-  final List<Color> colors;
-
-  const _PieChartView({
-    required this.title,
-    required this.items,
-    required this.colors,
-  });
-
-  @override
-  State<_PieChartView> createState() => _PieChartViewState();
-}
-
-class _PieChartViewState extends State<_PieChartView> {
-  int? _touchedIndex;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = widget.items;
-    if (items.isEmpty) return const SizedBox.shrink();
-    final total = items.fold<double>(0, (s, e) => s + e.value);
-    if (total <= 0) return const SizedBox.shrink();
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxSide = math.min(constraints.maxWidth, constraints.maxHeight);
-        // Адаптивный размер диаграммы в зависимости от размера экрана
-        final chartSize = maxSide.clamp(220.0, 420.0);
-        final baseRadius = chartSize * 0.28;
-        final touchedRadius = baseRadius * 1.15;
-
-        final sections = items.asMap().entries.map((entry) {
-          final i = entry.key;
-          final item = entry.value;
-          final color = widget.colors[i % widget.colors.length];
-          final isTouched = _touchedIndex == i;
-          return PieChartSectionData(
-            value: item.value,
-            title: '${(item.value / total * 100).toStringAsFixed(0)}%',
-            color: isTouched ? color.withValues(alpha: 0.9) : color.withValues(alpha: 0.75),
-            radius: isTouched ? touchedRadius : baseRadius,
-            titleStyle: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          );
-        }).toList();
-
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight - 32),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    widget.title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: chartSize,
-                    child: PieChart(
-              PieChartData(
-                sections: sections,
-                centerSpaceRadius: chartSize * 0.16,
-                pieTouchData: PieTouchData(
-                  touchCallback: (event, response) {
-                    setState(() {
-                      _touchedIndex = response?.touchedSection?.touchedSectionIndex;
-                    });
-                  },
-                ),
-                sectionsSpace: 2,
-              ),
-              duration: const Duration(milliseconds: 200),
-            ),
-          ),
-                  const SizedBox(height: 16),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: items.asMap().entries.map((entry) {
-                        final i = entry.key;
-                        final item = entry.value;
-                        final color = widget.colors[i % widget.colors.length];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.max,
-                            children: [
-                              Container(
-                                width: 14,
-                                height: 14,
-                                decoration: BoxDecoration(
-                                  color: color,
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 500),
-                                child: Text(
-                                  item.label,
-                                  style: const TextStyle(fontSize: 14),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${(item.value / total * 100).toStringAsFixed(1)}%',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey[800],
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _PodiumItem {
-  final String label;
-  final double value;
-  final String subtitle;
-
-  _PodiumItem({
-    required this.label,
-    required this.value,
-    required this.subtitle,
-  });
-}
-
-class _PodiumView extends StatelessWidget {
-  final String title;
-  final List<_PodiumItem> items;
-
-  const _PodiumView({required this.title, required this.items});
-
-  static const _medals = ['🥇', '🥈', '🥉'];
-  static const _placeColors = [
-    Color(0xFFD4AF37),
-    Color(0xFFC0C0C0),
-    Color(0xFFCD7F32),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    if (items.isEmpty) return const SizedBox.shrink();
-
-    final top3 = items.take(3).toList();
-    final rest = items.length > 3 ? items.sublist(3) : <_PodiumItem>[];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight - 32),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              if (top3.length > 1)
-                Expanded(
-                  child: _PodiumPlace(
-                    place: 2,
-                    medal: _medals[1],
-                    item: top3[1],
-                    color: _placeColors[1],
-                    height: 85,
-                  ),
-                ),
-              if (top3.isNotEmpty) ...[
-                if (top3.length > 1) const SizedBox(width: 8),
-                Expanded(
-                  child: _PodiumPlace(
-                    place: 1,
-                    medal: _medals[0],
-                    item: top3[0],
-                    color: _placeColors[0],
-                    height: 110,
-                  ),
-                ),
-              ],
-              if (top3.length > 2) ...[
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _PodiumPlace(
-                    place: 3,
-                    medal: _medals[2],
-                    item: top3[2],
-                    color: _placeColors[2],
-                    height: 65,
-                  ),
-                ),
-              ],
-            ],
-                  ),
-                  if (rest.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                    ...rest.asMap().entries.map((entry) {
-                      final idx = entry.key + 4;
-                      final item = entry.value;
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: Colors.blueGrey[100],
-                            child: Text(
-                              '$idx',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blueGrey[800],
-                              ),
-                            ),
-                          ),
-                          title: Text(
-                            item.label,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(item.subtitle),
-                          trailing: Text(
-                            '${item.value.toStringAsFixed(1)}%',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _PodiumPlace extends StatelessWidget {
-  final int place;
-  final String medal;
-  final _PodiumItem item;
-  final Color color;
-  final double height;
-
-  const _PodiumPlace({
-    required this.place,
-    required this.medal,
-    required this.item,
-    required this.color,
-    required this.height,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          medal,
-          style: const TextStyle(fontSize: 36),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          item.label,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        Text(
-          '${item.value.toStringAsFixed(1)}%',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          height: height,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.25),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-          ),
-          child: Center(
-            child: Text(
-              '$place',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: color.withValues(alpha: 0.8),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/core/constants.dart';
+import 'package:mtg_stats/core/format_utils.dart';
 import 'package:mtg_stats/core/platform_utils.dart';
 import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/services/api_config.dart';
@@ -230,7 +231,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                     const SizedBox(height: 8),
                     Center(
                       child: Text(
-                        _formatDuration(totalDuration),
+                        FormatUtils.formatDuration(totalDuration),
                         style: const TextStyle(
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
@@ -288,7 +289,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                       const SizedBox(height: 8),
                       Center(
                         child: Text(
-                          _formatDuration(displayTurn),
+                          FormatUtils.formatDuration(displayTurn),
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
@@ -301,7 +302,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                         mainAxisAlignment: MainAxisAlignment.start,
                         children: [
                           Text(
-                            'Лимит хода: ${_formatDuration(limit)}',
+                            'Лимит хода: ${FormatUtils.formatDuration(limit)}',
                             style: const TextStyle(fontSize: 14),
                           ),
                         ],
@@ -480,19 +481,6 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
         navigator.pop();
       }
     }
-  }
-
-  String _formatDuration(Duration d) {
-    final hours = d.inHours;
-    final minutes = d.inMinutes.remainder(60);
-    final seconds = d.inSeconds.remainder(60);
-    if (hours > 0) {
-      return '${hours.toString().padLeft(2, '0')}:'
-          '${minutes.toString().padLeft(2, '0')}:'
-          '${seconds.toString().padLeft(2, '0')}';
-    }
-    return '${minutes.toString().padLeft(2, '0')}:'
-        '${seconds.toString().padLeft(2, '0')}';
   }
 
   List<String> _teamPlayers(Game game, int teamNumber) {
