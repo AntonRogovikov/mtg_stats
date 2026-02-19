@@ -13,9 +13,9 @@ class ApiConfig {
   static const String _keyUserId = 'current_user_id';
   static const String _keyUserName = 'current_user_name';
   static const String _keyUserAdmin = 'current_user_is_admin';
-  static const String defaultBaseUrl =  'http://localhost:8080'; // для локальной разработки
+  //static const String defaultBaseUrl =  'http://localhost:8080'; // для локальной разработки
   //static const String defaultBaseUrl = 'https://mtg-stats-backend-production-1a71.up.railway.app';
-  //static const String defaultBaseUrl = 'https://antonrogovikov.duckdns.org';
+  static const String defaultBaseUrl = 'https://antonrogovikov.duckdns.org';
   static String _baseUrl = defaultBaseUrl;
   static String _apiToken = '';
   static String _jwtToken = '';
