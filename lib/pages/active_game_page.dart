@@ -12,7 +12,6 @@ import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/services/deck_image/deck_image_provider.dart';
 import 'package:mtg_stats/services/deck_service.dart';
-import 'package:mtg_stats/widgets/deck_card.dart';
 import 'package:mtg_stats/services/game_manager.dart';
 import 'package:mtg_stats/services/game_service.dart';
 
@@ -42,8 +41,6 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
   /// Развёрнутое изображение колоды по длинному нажатию (в пределах зоны).
   Deck? _expandedDeck;
   int? _expandedDeckTeamNumber;
-  /// Для каждой зоны: поменяны ли местами игроки (имена и колоды).
-  final Map<int, bool> _zonePlayersSwapped = {};
 
   @override
   void initState() {
@@ -830,9 +827,6 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
         : null;
 
     final teamPlayers = _teamPlayersWithDecks(game, teamNumber);
-    final displayTeamPlayers = (_zonePlayersSwapped[teamNumber] ?? false) && teamPlayers.length == 2
-        ? [teamPlayers[1], teamPlayers[0]]
-        : teamPlayers;
     final compositionWidget = showComposition
         ? (useDeckAvatars
             ? const SizedBox.shrink()
@@ -873,117 +867,114 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: LayoutBuilder(
-          builder: (context, zoneConstraints) {
-            final compositionWithZoneHeight = showComposition && useDeckAvatars
-                ? Expanded(
-                    child: Stack(
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.max,
-                          children: [
-                            _GreenTeamComposition(
-                              teamPlayers: displayTeamPlayers,
-                              color: color,
-                              decksById: decksById,
-                              maxAvatarHeight: (zoneConstraints.maxHeight * 0.45).clamp(80.0, 375.0),
-                              onDeckLongPress: (deck) {
-                                setState(() {
-                                  _expandedDeck = deck;
-                                  _expandedDeckTeamNumber = teamNumber;
-                                });
-                              },
-                              onSwap: teamPlayers.length == 2
-                                  ? () {
-                                      setState(() {
-                                        _zonePlayersSwapped[teamNumber] =
-                                            !(_zonePlayersSwapped[teamNumber] ?? false);
-                                      });
-                                    }
-                                  : null,
-                            ),
-                            if (timerWidget != null) ...[
+        child: Stack(
+          children: [
+            Opacity(
+              opacity: isActive ? 1.0 : 0.4,
+              child: LayoutBuilder(
+                builder: (context, zoneConstraints) {
+                  final compositionWithZoneHeight = showComposition && useDeckAvatars
+                      ? Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.max,
+                            children: [
+                              _GreenTeamComposition(
+                                teamPlayers: teamPlayers,
+                                color: color,
+                                decksById: decksById,
+                                onDeckTap: (deck) {
+                                  setState(() {
+                                    _expandedDeck = deck;
+                                    _expandedDeckTeamNumber = teamNumber;
+                                  });
+                                },
+                              ),
+                              if (timerWidget != null) ...[
+                                const SizedBox(height: 8),
+                                timerWidget,
+                              ],
                               const SizedBox(height: 8),
-                              timerWidget,
+                              SizedBox(
+                                width: double.infinity,
+                                child: buttonWidget,
+                              ),
                             ],
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              width: double.infinity,
-                              child: buttonWidget,
+                          ),
+                        )
+                      : compositionWidget;
+                  return Column(
+                    mainAxisAlignment: nameAtTop ? MainAxisAlignment.start : MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: nameAtTop
+                        ? [
+                            nameWidget,
+                            compositionWithZoneHeight,
+                            if (!useDeckAvatars) ...[
+                              const Spacer(),
+                              if (timerWidget != null) ...[
+                                timerWidget,
+                                const SizedBox(height: 8),
+                              ],
+                              buttonWidget,
+                            ],
+                          ]
+                        : [
+                            buttonWidget,
+                            const SizedBox(height: 16),
+                            nameWidget,
+                            compositionWidget,
+                          ],
+                  );
+                },
+              ),
+            ),
+            if (_expandedDeck != null && _expandedDeckTeamNumber == teamNumber)
+              Positioned.fill(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _expandedDeck = null;
+                          _expandedDeckTeamNumber = null;
+                        });
+                      },
+                      child: Container(
+                        color: Colors.black87,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            _ZoneExpandedDeckImage(
+                              deck: _expandedDeck!,
+                              maxWidth: constraints.maxWidth,
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _expandedDeck = null;
+                                    _expandedDeckTeamNumber = null;
+                                  });
+                                },
+                              ),
                             ),
                           ],
                         ),
-                        if (_expandedDeck != null &&
-                            _expandedDeckTeamNumber == teamNumber)
-                          Positioned.fill(
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _expandedDeck = null;
-                                  _expandedDeckTeamNumber = null;
-                                });
-                              },
-                              child: Container(
-                                color: Colors.black87,
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    _ZoneExpandedDeckImage(
-                                      deck: _expandedDeck!,
-                                      maxWidth: zoneConstraints.maxWidth,
-                                    ),
-                                    Positioned(
-                                      top: 8,
-                                      right: 8,
-                                      child: IconButton(
-                                        icon: const Icon(
-                                          Icons.close,
-                                          color: Colors.white,
-                                          size: 28,
-                                        ),
-                                        onPressed: () {
-                                          setState(() {
-                                            _expandedDeck = null;
-                                            _expandedDeckTeamNumber = null;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  )
-                : compositionWidget;
-            return Column(
-              mainAxisAlignment: nameAtTop ? MainAxisAlignment.start : MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: nameAtTop
-                  ? [
-                      nameWidget,
-                      compositionWithZoneHeight,
-                      if (!useDeckAvatars) ...[
-                        const Spacer(),
-                        if (timerWidget != null) ...[
-                          timerWidget,
-                          const SizedBox(height: 8),
-                        ],
-                        buttonWidget,
-                      ],
-                    ]
-                  : [
-                      buttonWidget,
-                      const SizedBox(height: 16),
-                      nameWidget,
-                      compositionWidget,
-                    ],
-            );
-          },
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -1151,28 +1142,27 @@ class _ZoneExpandedDeckImage extends StatelessWidget {
   }
 }
 
-/// Состав зелёной команды: имена в строке, карточки колод как в списке колод.
+/// Состав команды: имена в строке, ссылки на колоды (по нажатию — картинка на половину блока).
 class _GreenTeamComposition extends StatelessWidget {
   final List<GamePlayer> teamPlayers;
   final MaterialColor color;
   final Map<int, Deck> decksById;
-  final double maxAvatarHeight;
-  final void Function(Deck deck)? onDeckLongPress;
-  final VoidCallback? onSwap;
+  final void Function(Deck deck)? onDeckTap;
 
   const _GreenTeamComposition({
     required this.teamPlayers,
     required this.color,
     required this.decksById,
-    this.maxAvatarHeight = 200,
-    this.onDeckLongPress,
-    this.onSwap,
+    this.onDeckTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final playerWidgets = teamPlayers.map((p) {
       final deck = decksById[p.deckId];
+      final deckName = deck?.name ?? p.deckName;
+      final canShowImage = deck != null && onDeckTap != null;
+
       return Expanded(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1181,9 +1171,9 @@ class _GreenTeamComposition extends StatelessWidget {
             children: [
               Text(
                 p.userName,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 14,
-                  color: color[800],
+                  color: Colors.black,
                   fontWeight: FontWeight.w500,
                 ),
                 textAlign: TextAlign.center,
@@ -1191,37 +1181,20 @@ class _GreenTeamComposition extends StatelessWidget {
                 maxLines: 1,
               ),
               const SizedBox(height: 6),
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: 230,
-                  maxHeight: maxAvatarHeight,
-                ),
-                child: AspectRatio(
-                  aspectRatio: 0.63,
-                  child: deck != null
-                      ? DeckCard(
-                          deck: deck,
-                          isSelected: false,
-                          onTap: () {},
-                          onLongPress: () {
-                            onDeckLongPress?.call(deck);
-                          },
-                        )
-                      : Container(
-                          decoration: BoxDecoration(
-                            color: Colors.grey[300],
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Center(
-                            child: Text(
-                              p.deckName,
-                              style: const TextStyle(fontSize: 12),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
+              GestureDetector(
+                onTap: canShowImage ? () => onDeckTap!(deck) : null,
+                child: Text(
+                  deckName,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.black,
+                    fontWeight: canShowImage ? FontWeight.w600 : FontWeight.normal,
+                    decoration: canShowImage ? TextDecoration.underline : null,
+                    decorationColor: Colors.black,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -1230,36 +1203,15 @@ class _GreenTeamComposition extends StatelessWidget {
       );
     }).toList();
 
-    final swapButton = onSwap != null
-        ? Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: IconButton(
-              onPressed: onSwap,
-              icon: Icon(Icons.swap_horiz, color: color[700], size: 28),
-              tooltip: 'Поменять местами',
-              style: IconButton.styleFrom(
-                backgroundColor: color.withValues(alpha: 0.2),
-                padding: const EdgeInsets.all(8),
-              ),
-            ),
-          )
-        : null;
-
-    final rowChildren = <Widget>[
-      playerWidgets[0],
-      if (swapButton != null) ...[swapButton, playerWidgets[1]],
-      if (swapButton == null) ...playerWidgets.sublist(1),
-    ];
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const SizedBox(height: 8),
+        const SizedBox(height: 2),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: rowChildren,
+          children: playerWidgets,
         ),
       ],
     );
