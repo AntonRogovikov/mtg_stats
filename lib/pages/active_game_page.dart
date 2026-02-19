@@ -10,7 +10,8 @@ import 'package:mtg_stats/core/platform_utils.dart';
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/services/api_config.dart';
-import 'package:mtg_stats/services/deck_image/deck_image_provider.dart';
+import 'package:mtg_stats/widgets/active_game/team_composition.dart';
+import 'package:mtg_stats/widgets/active_game/zone_expanded_deck_image.dart';
 import 'package:mtg_stats/services/deck_service.dart';
 import 'package:mtg_stats/services/game_manager.dart';
 import 'package:mtg_stats/services/game_service.dart';
@@ -36,20 +37,38 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
   bool _overtimeMusicPending = false;
   int _lastTotalSeconds = -1;
   int _lastDisplayTurnSeconds = -1;
+  int _lastTeam1Seconds = -1;
+  int _lastTeam2Seconds = -1;
   /// Режим отображения: false — классический, true — лицом к лицу (2 зоны).
   bool _useFaceToFaceView = false;
   /// Развёрнутое изображение колоды по длинному нажатию (в пределах зоны).
   Deck? _expandedDeck;
   int? _expandedDeckTeamNumber;
+  /// Панель лимитов: false — справа, true — слева.
+  bool _panelOnLeft = false;
 
   @override
   void initState() {
     super.initState();
     _turnAudioPlayer.setReleaseMode(ReleaseMode.loop);
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!mounted) return;
       final game = GameManager.instance.activeGame;
       if (game == null) return;
+      if (GameManager.instance.isPaused) return;
+      final teamLimit = GameManager.instance.teamTimeLimitSeconds;
+      if (teamLimit > 0) {
+        final t1 = _teamTotalTurnDuration(game, 1);
+        final t2 = _teamTotalTurnDuration(game, 2);
+        if (t1.inSeconds >= teamLimit) {
+          await _finishGameTechnicalDefeat(context, 2);
+          return;
+        }
+        if (t2.inSeconds >= teamLimit) {
+          await _finishGameTechnicalDefeat(context, 1);
+          return;
+        }
+      }
       final hasTurnLimit = GameManager.instance.turnLimitSeconds > 0;
       final turnElapsed = GameManager.instance.currentTurnElapsed;
       final limit = Duration(seconds: GameManager.instance.turnLimitSeconds);
@@ -59,9 +78,16 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
           : turnElapsed;
       final totalSeconds = game.totalDuration.inSeconds;
       final displayTurnSeconds = displayTurn.inSeconds;
-      if (totalSeconds != _lastTotalSeconds || displayTurnSeconds != _lastDisplayTurnSeconds) {
+      final team1Seconds = _teamTotalTurnDuration(game, 1).inSeconds;
+      final team2Seconds = _teamTotalTurnDuration(game, 2).inSeconds;
+      if (totalSeconds != _lastTotalSeconds ||
+          displayTurnSeconds != _lastDisplayTurnSeconds ||
+          team1Seconds != _lastTeam1Seconds ||
+          team2Seconds != _lastTeam2Seconds) {
         _lastTotalSeconds = totalSeconds;
         _lastDisplayTurnSeconds = displayTurnSeconds;
+        _lastTeam1Seconds = team1Seconds;
+        _lastTeam2Seconds = team2Seconds;
         setState(() {});
       }
       if (_decksById.isEmpty) _loadDecks();
@@ -95,7 +121,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     final limit = Duration(seconds: GameManager.instance.turnLimitSeconds);
     final overtime = hasTurnLimit && turnElapsed > limit ? turnElapsed - limit : Duration.zero;
 
-    if (!hasTurnLimit || !_soundEnabled || !isTurnRunning) {
+    if (!hasTurnLimit || !_soundEnabled || !isTurnRunning || GameManager.instance.isPaused) {
       if (_playingTrack != null) {
         await _turnAudioPlayer.stop();
         if (mounted) {
@@ -269,13 +295,69 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Общее время игры',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Общее время игры',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            try {
+                              final updated = GameManager.instance.isPaused
+                                  ? await _gameService.resumeGame()
+                                  : await _gameService.pauseGame();
+                              if (mounted && updated != null) {
+                                GameManager.instance.setActiveGameFromApi(updated);
+                                setState(() {});
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Ошибка: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                            if (mounted) setState(() {});
+                          },
+                          icon: Icon(
+                            GameManager.instance.isPaused
+                                ? Icons.play_arrow
+                                : Icons.pause,
+                          ),
+                          label: Text(
+                            GameManager.instance.isPaused ? 'Продолжить' : 'Пауза',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: GameManager.instance.isPaused
+                                ? Colors.green
+                                : Colors.orange,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
+                    if (GameManager.instance.isPaused)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Center(
+                          child: Text(
+                            'ПАУЗА',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange[800],
+                            ),
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 8),
                     Center(
                       child: Text(
@@ -387,34 +469,45 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                       const SizedBox(height: 12),
                       Center(
                         child: ElevatedButton(
-                          onPressed: () async {
-                            if (GameManager.instance.isTurnRunning) {
-                              GameManager.instance.endTurn();
-                              // Автоматически начинаем ход у команды противника.
-                              GameManager.instance.startTurn();
-                              final g = GameManager.instance.activeGame;
-                              if (g != null) {
-                                try {
-                                  await _gameService.updateActiveGame(
-                                    g,
-                                    GameManager.instance.currentTurnTeam,
-                                    GameManager.instance.currentTurnStart,
-                                    g.turns,
-                                  );
-                                } catch (_) {}
+                          onPressed: GameManager.instance.isPaused
+                              ? null
+                              : () async {
+                            final g = GameManager.instance.activeGame;
+                            if (g == null) return;
+                            try {
+                              Game? updated;
+                              if (GameManager.instance.isTurnRunning) {
+                                // Закончить ход и начать ход противника — сначала API, потом состояние.
+                                final turnStart = GameManager.instance.currentTurnStart!;
+                                final now = DateTime.now();
+                                final elapsed = now.difference(turnStart);
+                                final limit = Duration(seconds: GameManager.instance.turnLimitSeconds);
+                                final overtime = GameManager.instance.turnLimitSeconds > 0 && elapsed > limit
+                                    ? elapsed - limit
+                                    : Duration.zero;
+                                final newTurn = GameTurn(
+                                  teamNumber: GameManager.instance.currentTurnTeam,
+                                  duration: elapsed,
+                                  overtime: overtime,
+                                );
+                                final newTurns = [...g.turns, newTurn];
+                                final newTeam = GameManager.instance.currentTurnTeam == 1 ? 2 : 1;
+                                updated = await _gameService.updateActiveGame(g, newTeam, now, newTurns);
+                              } else {
+                                // Начать ход — отдельный эндпоинт, сервер ставит время (сохраняется при перезагрузке).
+                                updated = await _gameService.startTurn();
                               }
-                            } else {
-                              GameManager.instance.startTurn();
-                              final g = GameManager.instance.activeGame;
-                              if (g != null) {
-                                try {
-                                  await _gameService.updateActiveGame(
-                                    g,
-                                    GameManager.instance.currentTurnTeam,
-                                    GameManager.instance.currentTurnStart,
-                                    g.turns,
-                                  );
-                                } catch (_) {}
+                              if (mounted && updated != null) {
+                                GameManager.instance.setActiveGameFromApi(updated);
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Ошибка: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
                               }
                             }
                             if (mounted) setState(() {});
@@ -499,6 +592,20 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     );
   }
 
+  Future<void> _finishGameTechnicalDefeat(BuildContext context, int winningTeam) async {
+    final game = GameManager.instance.activeGame;
+    if (game == null) return;
+    try {
+      await _gameService.finishGame(game.id, winningTeam,
+          isTechnicalDefeat: true);
+    } catch (_) {}
+    GameManager.instance.finishGame(winningTeam: winningTeam);
+    GameManager.instance.clearActiveGame();
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
   /// Общее время хода команды (включая текущий ход, если он у неё).
   Duration _teamTotalTurnDuration(Game game, int teamNumber) {
     final turns = game.turns;
@@ -516,20 +623,40 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
   }
 
   Widget _buildFaceToFaceBody(BuildContext context, Game game) {
-    final team1Color = Colors.blue;
-    final team2Color = Colors.green;
+    const baseTeam1Color = Colors.blue;
+    const baseTeam2Color = Colors.green;
     final team1Name = GameManager.instance.team1Name;
     final team2Name = GameManager.instance.team2Name;
     final team1TotalTime = _teamTotalTurnDuration(game, 1);
     final team2TotalTime = _teamTotalTurnDuration(game, 2);
+    final teamLimit = GameManager.instance.teamTimeLimitSeconds;
+    const warningThreshold = Duration(seconds: 30); // для теста; было 5 мин
+    final isTeam1TimeWarning = teamLimit > 0 &&
+        (Duration(seconds: teamLimit) - team1TotalTime) <= warningThreshold &&
+        team1TotalTime < Duration(seconds: teamLimit);
+    final isTeam2TimeWarning = teamLimit > 0 &&
+        (Duration(seconds: teamLimit) - team2TotalTime) <= warningThreshold &&
+        team2TotalTime < Duration(seconds: teamLimit);
+    final team1Color = isTeam1TimeWarning ? Colors.red : baseTeam1Color;
+    final team2Color = isTeam2TimeWarning ? Colors.red : baseTeam2Color;
     final totalDuration = game.totalDuration;
     final currentTeam = GameManager.instance.currentTurnTeam;
     final isTurnRunning = GameManager.instance.isTurnRunning;
     final isTeam1Active = currentTeam == 1;
     final isTeam2Active = currentTeam == 2;
 
+    final panel = _buildFaceToFaceRightAppBar(
+      context: context,
+      team1TotalTime: team1TotalTime,
+      team2TotalTime: team2TotalTime,
+      totalDuration: totalDuration,
+      team1Color: team1Color,
+      team2Color: team2Color,
+      panelOnLeft: _panelOnLeft,
+    );
     return Row(
       children: [
+        if (_panelOnLeft) panel,
         Expanded(
           child: Column(
             children: [
@@ -569,14 +696,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
             ],
           ),
         ),
-        _buildFaceToFaceRightAppBar(
-          context: context,
-          team1TotalTime: team1TotalTime,
-          team2TotalTime: team2TotalTime,
-          totalDuration: totalDuration,
-          team1Color: team1Color,
-          team2Color: team2Color,
-        ),
+        if (!_panelOnLeft) panel,
       ],
     );
   }
@@ -588,11 +708,13 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     required Duration totalDuration,
     required MaterialColor team1Color,
     required MaterialColor team2Color,
+    required bool panelOnLeft,
   }) {
+    final timerAngle = pi / 2 + (panelOnLeft ? pi : 0);
     final blueTimer = FittedBox(
       fit: BoxFit.scaleDown,
       child: Transform.rotate(
-        angle: pi / 2,
+        angle: timerAngle,
         child: Text(
           FormatUtils.formatDuration(team1TotalTime),
           style: TextStyle(
@@ -609,7 +731,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
         return FittedBox(
           fit: BoxFit.none,
           child: Transform.rotate(
-            angle: pi / 2,
+            angle: timerAngle,
             child: Text(
               FormatUtils.formatDuration(totalDuration),
               style: TextStyle(
@@ -626,7 +748,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     final greenTimer = FittedBox(
       fit: BoxFit.scaleDown,
       child: Transform.rotate(
-        angle: pi / 2,
+        angle: timerAngle,
         child: Text(
           FormatUtils.formatDuration(team2TotalTime),
           style: TextStyle(
@@ -638,16 +760,32 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
         ),
       ),
     );
-    final buttons = 
-       Column(
+    final buttons = Column(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Tooltip(
+            message: _panelOnLeft ? 'Панель справа' : 'Панель слева',
+            child: IconButton(
+              icon: Icon(
+                _panelOnLeft ? Icons.arrow_forward : Icons.arrow_back,
+                color: AppTheme.appBarForeground,
+                size: 22,
+              ),
+              style: IconButton.styleFrom(
+                padding: const EdgeInsets.all(8),
+                minimumSize: const Size(40, 40),
+              ),
+              onPressed: () {
+                setState(() => _panelOnLeft = !_panelOnLeft);
+              },
+            ),
+          ),
+          Tooltip(
             message: 'Стандартный режим',
             child: IconButton(
               icon: Icon(
-                Icons.view_agenda,
+                Icons.flip_to_front,
                 color: AppTheme.appBarForeground,
                 size: 22,
               ),
@@ -657,6 +795,59 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
               ),
               onPressed: () {
                 setState(() => _useFaceToFaceView = false);
+              },
+            ),
+          ),
+          Tooltip(
+            message: _soundEnabled ? 'Выключить музыку' : 'Включить музыку хода',
+            child: IconButton(
+              icon: Icon(
+                _soundEnabled ? Icons.volume_up : Icons.volume_off,
+                color: _soundEnabled ? AppTheme.appBarForeground : Colors.grey,
+                size: 22,
+              ),
+              style: IconButton.styleFrom(
+                padding: const EdgeInsets.all(8),
+                minimumSize: const Size(40, 40),
+              ),
+              onPressed: () {
+                setState(() => _soundEnabled = !_soundEnabled);
+                _syncTurnMusic();
+              },
+            ),
+          ),
+          Tooltip(
+            message: GameManager.instance.isPaused ? 'Продолжить' : 'Пауза',
+            child: IconButton(
+              icon: Icon(
+                GameManager.instance.isPaused ? Icons.play_arrow : Icons.pause,
+                color: AppTheme.appBarForeground,
+                size: 22,
+              ),
+              style: IconButton.styleFrom(
+                padding: const EdgeInsets.all(8),
+                minimumSize: const Size(40, 40),
+              ),
+              onPressed: () async {
+                try {
+                  final updated = GameManager.instance.isPaused
+                      ? await _gameService.resumeGame()
+                      : await _gameService.pauseGame();
+                  if (mounted && updated != null) {
+                    GameManager.instance.setActiveGameFromApi(updated);
+                    setState(() {});
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Ошибка: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+                if (mounted) setState(() {});
               },
             ),
           ),
@@ -764,24 +955,44 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     final buttonFontSize = (16 * scale).clamp(14.0, 22.0);
 
     final buttonWidget = ElevatedButton(
-      onPressed: isActive
+      onPressed: isActive && !GameManager.instance.isPaused
           ? () async {
-              if (isTurnRunning) {
-                GameManager.instance.endTurn();
-                GameManager.instance.startTurn();
-              } else {
-                GameManager.instance.startTurn();
-              }
               final g = GameManager.instance.activeGame;
-              if (g != null) {
-                try {
-                  await _gameService.updateActiveGame(
-                    g,
-                    GameManager.instance.currentTurnTeam,
-                    GameManager.instance.currentTurnStart,
-                    g.turns,
+              if (g == null) return;
+              try {
+                Game? updated;
+                if (isTurnRunning) {
+                  final turnStart = GameManager.instance.currentTurnStart!;
+                  final now = DateTime.now();
+                  final elapsed = now.difference(turnStart);
+                  final limit = Duration(seconds: game.turnLimitSeconds);
+                  final overtime = game.turnLimitSeconds > 0 && elapsed > limit
+                      ? elapsed - limit
+                      : Duration.zero;
+                  final newTurn = GameTurn(
+                    teamNumber: GameManager.instance.currentTurnTeam,
+                    duration: elapsed,
+                    overtime: overtime,
                   );
-                } catch (_) {}
+                  final newTurns = [...g.turns, newTurn];
+                  final newTeam = GameManager.instance.currentTurnTeam == 1 ? 2 : 1;
+                  updated = await _gameService.updateActiveGame(g, newTeam, now, newTurns);
+                } else {
+                  updated = await _gameService.startTurn();
+                }
+                if (mounted && updated != null) {
+                  GameManager.instance.setActiveGameFromApi(updated);
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      
+                      content: Text('Ошибка: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               }
               if (mounted) setState(() {});
             }
@@ -869,9 +1080,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
         padding: const EdgeInsets.all(16),
         child: Stack(
           children: [
-            Opacity(
-              opacity: isActive ? 1.0 : 0.4,
-              child: LayoutBuilder(
+            LayoutBuilder(
                 builder: (context, zoneConstraints) {
                   final compositionWithZoneHeight = showComposition && useDeckAvatars
                       ? Expanded(
@@ -880,7 +1089,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                             mainAxisAlignment: MainAxisAlignment.start,
                             mainAxisSize: MainAxisSize.max,
                             children: [
-                              _GreenTeamComposition(
+                              TeamComposition(
                                 teamPlayers: teamPlayers,
                                 color: color,
                                 decksById: decksById,
@@ -898,7 +1107,12 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                               const SizedBox(height: 8),
                               SizedBox(
                                 width: double.infinity,
-                                child: buttonWidget,
+                                child: isActive
+                                    ? buttonWidget
+                                    : Opacity(
+                                        opacity: 0.5,
+                                        child: buttonWidget,
+                                      ),
                               ),
                             ],
                           ),
@@ -917,11 +1131,21 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                                 timerWidget,
                                 const SizedBox(height: 8),
                               ],
-                              buttonWidget,
+                              isActive
+                                  ? buttonWidget
+                                  : Opacity(
+                                      opacity: 0.5,
+                                      child: buttonWidget,
+                                    ),
                             ],
                           ]
                         : [
-                            buttonWidget,
+                            isActive
+                                ? buttonWidget
+                                : Opacity(
+                                    opacity: 0.5,
+                                    child: buttonWidget,
+                                  ),
                             const SizedBox(height: 16),
                             nameWidget,
                             compositionWidget,
@@ -929,7 +1153,6 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                   );
                 },
               ),
-            ),
             if (_expandedDeck != null && _expandedDeckTeamNumber == teamNumber)
               Positioned.fill(
                 child: LayoutBuilder(
@@ -946,7 +1169,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
-                            _ZoneExpandedDeckImage(
+                            ZoneExpandedDeckImage(
                               deck: _expandedDeck!,
                               maxWidth: constraints.maxWidth,
                             ),
@@ -1059,17 +1282,38 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     final teamName = teamNumber == 1
         ? GameManager.instance.team1Name
         : GameManager.instance.team2Name;
+    final teamTotalTime = _teamTotalTurnDuration(game, teamNumber);
+    final teamLimit = GameManager.instance.teamTimeLimitSeconds;
+    final isTimeWarning = teamLimit > 0 &&
+        (Duration(seconds: teamLimit) - teamTotalTime) <= const Duration(seconds: 30) && // для теста; было 5 мин
+        teamTotalTime < Duration(seconds: teamLimit);
+    final teamColor = isTimeWarning ? Colors.red : (teamNumber == 1 ? Colors.blue : Colors.green);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          teamName,
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: teamNumber == 1 ? Colors.blue[800] : Colors.green[800],
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                teamName,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: teamColor[800],
+                ),
+              ),
+            ),
+            if (teamLimit > 0)
+              Text(
+                '${FormatUtils.formatDuration(teamTotalTime)} / ${FormatUtils.formatDuration(Duration(seconds: teamLimit))}',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: isTimeWarning ? Colors.red[700] : Colors.grey[700],
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 6),
         ...teamPlayers.map(
@@ -1098,124 +1342,4 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     );
   }
 }
-
-/// Развёрнутое изображение колоды на всю ширину зоны.
-class _ZoneExpandedDeckImage extends StatelessWidget {
-  final Deck deck;
-  final double maxWidth;
-
-  const _ZoneExpandedDeckImage({
-    required this.deck,
-    required this.maxWidth,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final pathOrUrl = deck.imageUrl ?? deck.avatarUrl;
-    final provider = deckImageProvider(
-      pathOrUrl?.isNotEmpty == true ? pathOrUrl : null,
-    );
-    final useAsset = provider == null;
-
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: maxWidth),
-      child: useAsset
-          ? Image.asset(
-              AppConstants.defaultDeckImageAsset,
-              fit: BoxFit.contain,
-            )
-          : Image(
-              image: provider,
-              fit: BoxFit.contain,
-              loadingBuilder: (context, child, progress) {
-                if (progress == null) return child;
-                return const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                );
-              },
-              errorBuilder: (_, __, ___) => Image.asset(
-                AppConstants.defaultDeckImageAsset,
-                fit: BoxFit.contain,
-              ),
-            ),
-    );
-  }
-}
-
-/// Состав команды: имена в строке, ссылки на колоды (по нажатию — картинка на половину блока).
-class _GreenTeamComposition extends StatelessWidget {
-  final List<GamePlayer> teamPlayers;
-  final MaterialColor color;
-  final Map<int, Deck> decksById;
-  final void Function(Deck deck)? onDeckTap;
-
-  const _GreenTeamComposition({
-    required this.teamPlayers,
-    required this.color,
-    required this.decksById,
-    this.onDeckTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final playerWidgets = teamPlayers.map((p) {
-      final deck = decksById[p.deckId];
-      final deckName = deck?.name ?? p.deckName;
-      final canShowImage = deck != null && onDeckTap != null;
-
-      return Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                p.userName,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.black,
-                  fontWeight: FontWeight.w500,
-                ),
-                textAlign: TextAlign.center,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-              const SizedBox(height: 6),
-              GestureDetector(
-                onTap: canShowImage ? () => onDeckTap!(deck) : null,
-                child: Text(
-                  deckName,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.black,
-                    fontWeight: canShowImage ? FontWeight.w600 : FontWeight.normal,
-                    decoration: canShowImage ? TextDecoration.underline : null,
-                    decorationColor: Colors.black,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const SizedBox(height: 2),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: playerWidgets,
-        ),
-      ],
-    );
-  }
-}
-
 

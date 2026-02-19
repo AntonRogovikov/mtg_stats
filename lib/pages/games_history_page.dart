@@ -131,30 +131,49 @@ class _GamesHistoryPageState extends State<GamesHistoryPage> {
     final team1 = g.team1Name?.isNotEmpty == true ? g.team1Name! : 'Команда 1';
     final team2 = g.team2Name?.isNotEmpty == true ? g.team2Name! : 'Команда 2';
     final winner = g.winningTeam;
-    return RichText(
-      text: TextSpan(
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-          color: Colors.black87,
-          fontSize: 16,
+    final techDefeat = g.isTechnicalDefeat;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        RichText(
+          text: TextSpan(
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+              fontSize: 16,
+            ),
+            children: [
+              TextSpan(text: team1, style: TextStyle(color: _team1Color[800])),
+              if (winner == 1)
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: _buildWinBadge(),
+                ),
+              const TextSpan(text: ' vs '),
+              TextSpan(text: team2, style: TextStyle(color: _team2Color[800])),
+              if (winner == 2)
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: _buildWinBadge(),
+                ),
+              if (g.endTime == null) const TextSpan(text: ' (активная)'),
+            ],
+          ),
         ),
-        children: [
-          TextSpan(text: team1, style: TextStyle(color: _team1Color[800])),
-          if (winner == 1)
-            WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: _buildWinBadge(),
+        if (techDefeat)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Тех. поражение по времени',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.orange[800],
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          const TextSpan(text: ' vs '),
-          TextSpan(text: team2, style: TextStyle(color: _team2Color[800])),
-          if (winner == 2)
-            WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: _buildWinBadge(),
-            ),
-          if (g.endTime == null) const TextSpan(text: ' (активная)'),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
@@ -419,12 +438,13 @@ class GameDetailPage extends StatelessWidget {
     final team1Players = game.players.take(half).toList();
     final team2Players = game.players.skip(half).toList();
 
+    // duration — полное время хода (overtime уже включён), паузы не учитываются в ходах
     final team1TurnDuration = game.turns
         .where((t) => t.teamNumber == 1)
-        .fold<Duration>(Duration.zero, (s, t) => s + t.duration + t.overtime);
+        .fold<Duration>(Duration.zero, (s, t) => s + t.duration);
     final team2TurnDuration = game.turns
         .where((t) => t.teamNumber == 2)
-        .fold<Duration>(Duration.zero, (s, t) => s + t.duration + t.overtime);
+        .fold<Duration>(Duration.zero, (s, t) => s + t.duration);
 
     return Scaffold(
       appBar: AppBar(
@@ -504,6 +524,19 @@ class GameDetailPage extends StatelessWidget {
                           ),
                           backgroundColor: Colors.green[700],
                         ),
+                        if (game.isTechnicalDefeat) ...[
+                          const SizedBox(height: 4),
+                          Chip(
+                            label: const Text(
+                              'Тех. поражение по времени',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
+                              ),
+                            ),
+                            backgroundColor: Colors.orange[700],
+                          ),
+                        ],
                       ],
                     ],
                   ],
@@ -583,6 +616,16 @@ class GameDetailPage extends StatelessWidget {
                           color: Colors.grey[700],
                         ),
                       ),
+                      if (game.teamTimeLimitSeconds > 0) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Лимит на команду: ${FormatUtils.formatDurationHuman(Duration(seconds: game.teamTimeLimitSeconds))}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       ...game.turns.asMap().entries.map((e) {
                         final i = e.key + 1;

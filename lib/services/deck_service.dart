@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:mtg_stats/core/api_error.dart';
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/services/api_config.dart';
 
@@ -12,8 +13,10 @@ class DeckService {
       body: json.encode({'name': name}),
       headers: {...ApiConfig.authHeaders, 'Content-Type': 'application/json'},
     );
-
-    return Deck.fromJson(json.decode(response.body));
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception(ApiError.parse(response.body, 'Не удалось создать колоду'));
+    }
+    return Deck.fromJson(json.decode(response.body) as Map<String, dynamic>);
   }
 
   Future<Deck> updateDeck(Deck deck) async {
@@ -22,8 +25,10 @@ class DeckService {
       body: json.encode(deck.toJsonForUpdate()),
       headers: {...ApiConfig.authHeaders, 'Content-Type': 'application/json'},
     );
-
-    return Deck.fromJson(json.decode(response.body));
+    if (response.statusCode != 200) {
+      throw Exception(ApiError.parse(response.body, 'Не удалось обновить колоду'));
+    }
+    return Deck.fromJson(json.decode(response.body) as Map<String, dynamic>);
   }
 
   Future<Deck?> getDeckById(int id) async {
@@ -49,9 +54,11 @@ class DeckService {
       Uri.parse('${ApiConfig.baseUrl}/api/decks'),
       headers: ApiConfig.authHeaders,
     );
-
+    if (response.statusCode != 200) {
+      throw Exception(ApiError.parse(response.body, 'Не удалось загрузить колоды'));
+    }
     final List<dynamic> data = json.decode(response.body);
-    return data.map((j) => Deck.fromJson(j)).toList();
+    return data.map((j) => Deck.fromJson(j as Map<String, dynamic>)).toList();
   }
 
   Future<Deck> uploadDeckImage(

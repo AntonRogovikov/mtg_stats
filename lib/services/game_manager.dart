@@ -27,11 +27,17 @@ class GameManager {
   int get currentTurnTeam => _currentTurnTeam;
   bool get isTurnRunning => _currentTurnStart != null;
   DateTime? get currentTurnStart => _currentTurnStart;
+  bool get isPaused => _activeGame?.isPaused ?? false;
+  DateTime? get pauseStartedAt => _activeGame?.pauseStartedAt;
 
   int get turnLimitSeconds => _activeGame?.turnLimitSeconds ?? 0;
+  int get teamTimeLimitSeconds => _activeGame?.teamTimeLimitSeconds ?? 0;
 
   Duration get currentTurnElapsed {
     if (_currentTurnStart == null) return Duration.zero;
+    if (isPaused && pauseStartedAt != null) {
+      return pauseStartedAt!.difference(_currentTurnStart!);
+    }
     return DateTime.now().difference(_currentTurnStart!);
   }
 

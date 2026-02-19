@@ -42,6 +42,11 @@ class _GamePageState extends State<GamePage> {
   int? _firstMoveTeam;
   bool _useTurnLimit = false;
   int _turnLimitSeconds = 300;
+  bool _useTeamTimeLimit = false;
+  int _teamTimeLimitSeconds = 1800; // 30 мин по умолчанию
+  static const _teamTimeLimitOptions = [
+    60, 1800, 3600, 5400, 7200, 9000, 10800,
+  ]; // 60 сек — тест, потом убрать; 30мин..3ч
 
   final GameService _gameService = GameService();
 
@@ -238,6 +243,7 @@ class _GamePageState extends State<GamePage> {
     }
 
     final turnLimit = _useTurnLimit ? _turnLimitSeconds : 0;
+    final teamTimeLimit = _useTeamTimeLimit ? _teamTimeLimitSeconds : 0;
     // Автоматическая генерация названий команд при старте игры.
     var team1Name = getRandomTeamName(_random);
     var team2Name = getRandomTeamName(_random);
@@ -248,6 +254,7 @@ class _GamePageState extends State<GamePage> {
       id: '',
       startTime: DateTime.now(),
       turnLimitSeconds: turnLimit,
+      teamTimeLimitSeconds: teamTimeLimit,
       firstMoveTeam: _firstMoveTeam!,
       players: players,
       team1Name: team1Name,
@@ -262,6 +269,14 @@ class _GamePageState extends State<GamePage> {
         team1Name: team1Name,
         team2Name: team2Name,
       );
+      // Автоматически начинаем первый ход, чтобы время команд пошло сразу.
+      try {
+        final withTurn = await _gameService.startTurn();
+        if (mounted && withTurn != null) {
+          GameManager.instance.setActiveGameFromApi(withTurn);
+        }
+      } catch (_) {}
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => const ActiveGamePage(),
@@ -649,6 +664,66 @@ class _GamePageState extends State<GamePage> {
                 },
               ),
             ],
+            const SizedBox(height: 16),
+            const Text(
+              'Общее время на команду',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            CheckboxListTile(
+              value: _useTeamTimeLimit,
+              onChanged: (value) {
+                setState(() {
+                  _useTeamTimeLimit = value ?? false;
+                });
+              },
+              title: const Text('Ограничение общего времени на команду'),
+              subtitle: _useTeamTimeLimit
+                  ? Text(
+                      _formatTeamTimeLimit(_teamTimeLimitSeconds),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                      ),
+                    )
+                  : null,
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+            ),
+            if (_useTeamTimeLimit) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Максимальное время на команду:'),
+                  Text(
+                    _formatTeamTimeLimit(_teamTimeLimitSeconds),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              Slider(
+                value: _teamTimeLimitOptions
+                    .indexOf(_teamTimeLimitSeconds)
+                    .clamp(0, _teamTimeLimitOptions.length - 1)
+                    .toDouble(),
+                min: 0,
+                max: (_teamTimeLimitOptions.length - 1).toDouble(),
+                divisions: _teamTimeLimitOptions.length - 1,
+                label: _formatTeamTimeLimit(_teamTimeLimitSeconds),
+                onChanged: (value) {
+                  final idx = value.round().clamp(0, _teamTimeLimitOptions.length - 1);
+                  setState(() {
+                    _teamTimeLimitSeconds = _teamTimeLimitOptions[idx];
+                  });
+                },
+              ),
+            ],
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
@@ -670,6 +745,16 @@ class _GamePageState extends State<GamePage> {
         ),
       ),
     );
+  }
+
+  static String _formatTeamTimeLimit(int seconds) {
+    if (seconds < 60) return '$seconds сек';
+    final m = seconds ~/ 60;
+    if (m < 60) return '$m мин';
+    final h = m ~/ 60;
+    final rest = m % 60;
+    if (rest == 0) return '$h ч';
+    return '$h ч $rest мин';
   }
 
   Widget _buildTeamChoiceCard({

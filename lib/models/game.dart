@@ -78,6 +78,7 @@ class Game {
   final DateTime startTime;
   DateTime? endTime;
   final int turnLimitSeconds;
+  final int teamTimeLimitSeconds;
   final int firstMoveTeam;
   final List<GamePlayer> players;
   final List<GameTurn> turns;
@@ -85,13 +86,18 @@ class Game {
   String? team1Name;
   String? team2Name;
   int? winningTeam;
+  bool isTechnicalDefeat;
   int? currentTurnTeam;
   DateTime? currentTurnStart;
+  bool isPaused;
+  DateTime? pauseStartedAt;
+  int totalPauseDurationSeconds;
 
   Game({
     required this.id,
     required this.startTime,
     required this.turnLimitSeconds,
+    this.teamTimeLimitSeconds = 0,
     required this.firstMoveTeam,
     required this.players,
     List<GameTurn>? turns,
@@ -99,12 +105,22 @@ class Game {
     this.team1Name,
     this.team2Name,
     this.winningTeam,
+    this.isTechnicalDefeat = false,
     this.currentTurnTeam,
     this.currentTurnStart,
+    this.isPaused = false,
+    this.pauseStartedAt,
+    this.totalPauseDurationSeconds = 0,
   }) : turns = turns ?? [];
 
-  Duration get totalDuration =>
-      (endTime ?? DateTime.now()).difference(startTime);
+  /// Общее время игры без учёта пауз.
+  Duration get totalDuration {
+    final end = endTime ?? (isPaused && pauseStartedAt != null
+        ? pauseStartedAt!
+        : DateTime.now());
+    return end.difference(startTime) -
+        Duration(seconds: totalPauseDurationSeconds);
+  }
 
   Duration get averageTurnDuration {
     if (turns.isEmpty) return Duration.zero;
@@ -123,6 +139,7 @@ class Game {
           ? DateTime.parse(json['end_time'] as String)
           : null,
       turnLimitSeconds: json['turn_limit_seconds'] as int? ?? 0,
+      teamTimeLimitSeconds: json['team_time_limit_seconds'] as int? ?? 0,
       firstMoveTeam: json['first_move_team'] as int? ?? 1,
       players: (json['players'] as List<dynamic>?)
               ?.map((e) => GamePlayer.fromJson(e as Map<String, dynamic>))
@@ -135,10 +152,17 @@ class Game {
       team1Name: json['team1_name'] as String?,
       team2Name: json['team2_name'] as String?,
       winningTeam: json['winning_team'] as int?,
+      isTechnicalDefeat: json['is_technical_defeat'] as bool? ?? false,
       currentTurnTeam: json['current_turn_team'] as int?,
       currentTurnStart: json['current_turn_start'] != null
           ? DateTime.parse(json['current_turn_start'] as String)
           : null,
+      isPaused: json['is_paused'] as bool? ?? false,
+      pauseStartedAt: json['pause_started_at'] != null
+          ? DateTime.parse(json['pause_started_at'] as String)
+          : null,
+      totalPauseDurationSeconds:
+          json['total_pause_duration_seconds'] as int? ?? 0,
     );
   }
 
@@ -157,6 +181,7 @@ class Game {
 
   Map<String, dynamic> toCreateRequest() => {
         'turn_limit_seconds': turnLimitSeconds,
+        'team_time_limit_seconds': teamTimeLimitSeconds,
         'first_move_team': firstMoveTeam,
         'players': players.map((e) => e.toJson()).toList(),
         'team1_name': team1Name,
