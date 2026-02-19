@@ -740,18 +740,22 @@ class _DeckListPageState extends State<DeckListPage> {
         onPointerCancel: (PointerCancelEvent e) {
           setState(() => _isMouseScrollDragging = false);
         },
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: GridView.builder(
-            controller: _decksScrollController,
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 180,
-              crossAxisSpacing: 20,
-              mainAxisSpacing: 10,
-              childAspectRatio: 0.63,
-            ),
-            itemCount: _filteredDecks.length,
-            itemBuilder: (context, index) {
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth - 40;
+            final maxExtent = (width / 3).clamp(120.0, 220.0);
+            return Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: GridView.builder(
+                controller: _decksScrollController,
+                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: maxExtent,
+                  crossAxisSpacing: 20,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 0.63,
+                ),
+                itemCount: _filteredDecks.length,
+                itemBuilder: (context, index) {
             final deck = _filteredDecks[index];
             final isSelected = _selectedDeckIndex != null &&
                 _selectedDeckIndex! < decks.length &&
@@ -778,8 +782,10 @@ class _DeckListPageState extends State<DeckListPage> {
               },
               onMenuTap: () => _showDeckOptions(deck),
             );
+                },
+              ),
+            );
           },
-        ),
         ),
         ),
       ),

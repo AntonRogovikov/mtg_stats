@@ -218,7 +218,7 @@ class _GamesHistoryPageState extends State<GamesHistoryPage> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Поиск партии',
+                hintText: 'Поиск партий',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(

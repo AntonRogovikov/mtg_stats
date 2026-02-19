@@ -12,6 +12,9 @@ abstract class AppConstants {
   /// контент по центру с ограничением максимальной ширины.
   static const double desktopBreakpoint = 600;
 
+  /// Ширина экрана для планшетов (боковая панель, двухколоночный layout).
+  static const double tabletBreakpoint = 900;
+
   /// Максимальная ширина контента на десктопе/в браузере (логические пиксели).
   static const double maxContentWidth = 800;
 }
