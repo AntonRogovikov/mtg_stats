@@ -62,7 +62,7 @@ class GameService {
     );
     if (response.statusCode == 404) return null;
     if (response.statusCode != 200) {
-      throw Exception('Failed to pause: ${response.statusCode}');
+      throw Exception(ApiError.parse(response.body, 'Не удалось поставить на паузу'));
     }
     return Game.fromJson(
         json.decode(response.body) as Map<String, dynamic>);
@@ -77,7 +77,7 @@ class GameService {
     );
     if (response.statusCode == 404) return null;
     if (response.statusCode != 200) {
-      throw Exception('Failed to resume: ${response.statusCode}');
+      throw Exception(ApiError.parse(response.body, 'Не удалось снять паузу'));
     }
     return Game.fromJson(
         json.decode(response.body) as Map<String, dynamic>);
@@ -92,7 +92,7 @@ class GameService {
     );
     if (response.statusCode == 404) return null;
     if (response.statusCode != 200) {
-      throw Exception('Failed to start turn: ${response.statusCode}');
+      throw Exception(ApiError.parse(response.body, 'Не удалось начать ход'));
     }
     return Game.fromJson(
         json.decode(response.body) as Map<String, dynamic>);
@@ -105,7 +105,7 @@ class GameService {
     );
     if (response.statusCode == 404) return null;
     if (response.statusCode != 200) {
-      throw Exception('Failed to get active game: ${response.statusCode}');
+      throw Exception(ApiError.parse(response.body, 'Не удалось загрузить активную игру'));
     }
     return Game.fromJson(
         json.decode(response.body) as Map<String, dynamic>);
@@ -142,7 +142,7 @@ class GameService {
       headers: {...ApiConfig.authHeaders, 'Content-Type': 'application/json'},
     );
     if (response.statusCode != 200) {
-      throw Exception('Failed to finish game: ${response.statusCode}');
+      throw Exception(ApiError.parse(response.body, 'Не удалось завершить игру'));
     }
     return Game.fromJson(
         json.decode(response.body) as Map<String, dynamic>);

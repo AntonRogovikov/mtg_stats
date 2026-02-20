@@ -5,9 +5,13 @@ import 'package:mtg_stats/services/api_config.dart';
 class MaintenanceService {
   /// Скачивает архив с бэкапом всех данных (пользователи, колоды, игры, изображения).
   ///
-  /// Возвращает сырые байты ответа.
-  Future<List<int>> downloadBackup() async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/export/all');
+  /// [includePasswords] — при true в архив включаются хеши паролей (полное восстановление).
+  /// По умолчанию — без паролей (безопасный экспорт).
+  Future<List<int>> downloadBackup({bool includePasswords = false}) async {
+    var uri = Uri.parse('${ApiConfig.baseUrl}/api/export/all');
+    if (includePasswords) {
+      uri = uri.replace(queryParameters: {'include_passwords': 'true'});
+    }
     final response = await http.get(
       uri,
       headers: {...ApiConfig.authHeaders, 'Accept': 'application/json'},

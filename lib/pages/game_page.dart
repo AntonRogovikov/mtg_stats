@@ -87,7 +87,9 @@ class _GamePageState extends State<GamePage> {
           );
           return;
         }
-      } catch (_) {}
+      } catch (_) {
+        // Ошибка проверки активной игры не блокирует форму — пользователь может создать новую.
+      }
       if (mounted) {
         setState(() => _isCheckingActiveGame = false);
       }

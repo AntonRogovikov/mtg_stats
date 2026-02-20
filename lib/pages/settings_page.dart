@@ -212,13 +212,12 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _exportAll() async {
-    final confirmed = await _showConfirmationDialog(
-      title: 'Экспорт всех данных',
-      message:
-          'Будет выполнен экспорт всех данных (пользователи, колоды, игры, изображения).'
-          '\n\nВы уверены, что хотите продолжить?',
+    final result = await showDialog<_ExportResult>(
+      context: context,
+      builder: (context) => const _ExportDialog(),
     );
-    if (!confirmed || !mounted) return;
+    if (result == null || !mounted) return;
+    final includePasswords = result.includePasswords;
 
     final location = await getSaveLocation(
       suggestedName: 'mtg_stats_export.json.gz',
@@ -234,7 +233,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
     setState(() => _exporting = true);
     try {
-      final bytes = await _maintenanceService.downloadBackup();
+      final bytes = await _maintenanceService.downloadBackup(
+        includePasswords: includePasswords,
+      );
       final file = XFile.fromData(
         Uint8List.fromList(bytes),
         name: 'mtg_stats_export.json.gz',
@@ -809,6 +810,62 @@ class _SettingsPageState extends State<SettingsPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ExportResult {
+  final bool includePasswords;
+  const _ExportResult({required this.includePasswords});
+}
+
+class _ExportDialog extends StatefulWidget {
+  const _ExportDialog();
+
+  @override
+  State<_ExportDialog> createState() => _ExportDialogState();
+}
+
+class _ExportDialogState extends State<_ExportDialog> {
+  bool _includePasswords = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Экспорт всех данных'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Будет выполнен экспорт (пользователи, колоды, игры, изображения).',
+          ),
+          const SizedBox(height: 16),
+          CheckboxListTile(
+            title: const Text('Включить пароли', style: TextStyle(fontSize: 14)),
+            subtitle: const Text(
+              'Для полного восстановления на другом сервере',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            value: _includePasswords,
+            onChanged: (v) => setState(() => _includePasswords = v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('Отмена'),
+        ),
+        TextButton(
+          onPressed: () =>
+              Navigator.of(context).pop(_ExportResult(includePasswords: _includePasswords)),
+          child: const Text('Экспортировать'),
+        ),
+      ],
     );
   }
 }

@@ -107,7 +107,6 @@ class GameManager {
     _activeGame = game;
     _currentTurnTeam = game.currentTurnTeam ?? 1;
     _currentTurnStart = game.currentTurnStart;
-    // Если локальные имена не заданы, берём те, что пришли из API.
     _team1Name ??= game.team1Name;
     _team2Name ??= game.team2Name;
   }

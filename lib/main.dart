@@ -22,7 +22,7 @@ void main() async {
   runApp(const MyApp());
 }
 
-/// Корневой виджет приложения: маршрутизация по разделам.
+/// Корневой виджет приложения: MaterialApp с named routes, AppTheme, ResponsiveWebLayout.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
