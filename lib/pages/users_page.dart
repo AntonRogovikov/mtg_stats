@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/core/ui_feedback.dart';
 import 'package:mtg_stats/models/user.dart';
+import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
-import 'package:mtg_stats/services/user_service.dart';
 
 /// Управление пользователями (только для администраторов).
-class UsersPage extends StatefulWidget {
+class UsersPage extends ConsumerStatefulWidget {
   const UsersPage({super.key});
 
   @override
-  State<UsersPage> createState() => _UsersPageState();
+  ConsumerState<UsersPage> createState() => _UsersPageState();
 }
 
-class _UsersPageState extends State<UsersPage> {
-  final UserService _userService = UserService();
+class _UsersPageState extends ConsumerState<UsersPage> {
   List<User> _users = [];
   bool _loading = true;
   String? _error;
@@ -24,13 +25,22 @@ class _UsersPageState extends State<UsersPage> {
     _loadUsers();
   }
 
+  void _showSnack(String message, Color color) {
+    if (!mounted) return;
+    UiFeedback.showMessage(
+      context,
+      message: message,
+      backgroundColor: color,
+    );
+  }
+
   Future<void> _loadUsers() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final list = await _userService.getUsers();
+      final list = await ref.read(userServiceProvider).getUsers();
       if (mounted) {
         setState(() {
           _users = list;
@@ -109,17 +119,12 @@ class _UsersPageState extends State<UsersPage> {
 
     final name = nameController.text.trim();
     if (name.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Имя от 2 до 100 символов'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      _showSnack('Имя от 2 до 100 символов', Colors.orange);
       return;
     }
 
     try {
-      await _userService.createUser(
+      await ref.read(userServiceProvider).createUser(
         name,
         password: passwordController.text.isNotEmpty
             ? passwordController.text
@@ -127,23 +132,11 @@ class _UsersPageState extends State<UsersPage> {
         isAdmin: isAdmin,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Пользователь создан'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _showSnack('Пользователь создан', Colors.green);
         _loadUsers();
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showSnack('Ошибка: $e', Colors.red);
     }
   }
 
@@ -208,17 +201,12 @@ class _UsersPageState extends State<UsersPage> {
 
     final name = nameController.text.trim();
     if (name.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Имя от 2 до 100 символов'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      _showSnack('Имя от 2 до 100 символов', Colors.orange);
       return;
     }
 
     try {
-      await _userService.updateUser(
+      await ref.read(userServiceProvider).updateUser(
         user.id,
         name,
         password: passwordController.text.isNotEmpty
@@ -227,23 +215,11 @@ class _UsersPageState extends State<UsersPage> {
         isAdmin: ApiConfig.isAdmin ? isAdmin : null,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Пользователь обновлён'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _showSnack('Пользователь обновлён', Colors.green);
         _loadUsers();
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showSnack('Ошибка: $e', Colors.red);
     }
   }
 
@@ -271,25 +247,13 @@ class _UsersPageState extends State<UsersPage> {
     if (result != true || !mounted) return;
 
     try {
-      await _userService.deleteUser(user.id);
+      await ref.read(userServiceProvider).deleteUser(user.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Пользователь удалён'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _showSnack('Пользователь удалён', Colors.green);
         _loadUsers();
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showSnack('Ошибка: $e', Colors.red);
     }
   }
 
@@ -336,53 +300,104 @@ class _UsersPageState extends State<UsersPage> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
-              const SizedBox(height: 16),
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _loadUsers,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Повторить'),
-              ),
-            ],
-          ),
-        ),
+      return _UsersErrorState(
+        error: _error!,
+        onRetry: _loadUsers,
       );
     }
     if (_users.isEmpty) {
-      return Center(
+      return const _UsersEmptyState();
+    }
+    return _UsersList(
+      users: _users,
+      onRefresh: _loadUsers,
+      onEdit: _showEditDialog,
+      onDelete: _confirmDelete,
+    );
+  }
+}
+
+class _UsersErrorState extends StatelessWidget {
+  const _UsersErrorState({
+    required this.error,
+    required this.onRetry,
+  });
+
+  final String error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
+            Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
             const SizedBox(height: 16),
-            Text(
-              'Нет пользователей',
-              style: TextStyle(fontSize: 18, color: Colors.grey[700]),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Нажмите + чтобы добавить',
-              style: TextStyle(color: Colors.grey[600]),
+            Text(error, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Повторить'),
             ),
           ],
         ),
-      );
-    }
+      ),
+    );
+  }
+}
+
+class _UsersEmptyState extends StatelessWidget {
+  const _UsersEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text(
+            'Нет пользователей',
+            style: TextStyle(fontSize: 18, color: Colors.grey[700]),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Нажмите + чтобы добавить',
+            style: TextStyle(color: Colors.grey[600]),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UsersList extends StatelessWidget {
+  const _UsersList({
+    required this.users,
+    required this.onRefresh,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final List<User> users;
+  final Future<void> Function() onRefresh;
+  final ValueChanged<User> onEdit;
+  final ValueChanged<User> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
     return RefreshIndicator(
-      onRefresh: _loadUsers,
+      onRefresh: onRefresh,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: _users.length,
+        itemCount: users.length,
         itemBuilder: (context, index) {
-          final user = _users[index];
+          final user = users[index];
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
@@ -403,8 +418,8 @@ class _UsersPageState extends State<UsersPage> {
               ),
               trailing: PopupMenuButton<String>(
                 onSelected: (value) {
-                  if (value == 'edit') _showEditDialog(user);
-                  if (value == 'delete') _confirmDelete(user);
+                  if (value == 'edit') onEdit(user);
+                  if (value == 'delete') onDelete(user);
                 },
                 itemBuilder: (context) => [
                   const PopupMenuItem(value: 'edit', child: Text('Редактировать')),
@@ -414,7 +429,7 @@ class _UsersPageState extends State<UsersPage> {
                   ),
                 ],
               ),
-              onTap: () => _showEditDialog(user),
+              onTap: () => onEdit(user),
             ),
           );
         },

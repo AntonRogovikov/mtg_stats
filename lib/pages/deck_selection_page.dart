@@ -52,6 +52,16 @@ class _DeckSelectionPageState extends State<DeckSelectionPage> {
   final Random _fastRandom = Random();
   Random? _secureRandom;
   bool _secureInitialized = false;
+
+  void _showWarning(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
   final TextEditingController _manualSumController = TextEditingController();
   final DeckService _deckService = DeckService();
 
@@ -151,16 +161,7 @@ class _DeckSelectionPageState extends State<DeckSelectionPage> {
     }
 
     if (deckToAssign == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Все колоды уже выбраны. Освободите колоду или добавьте новую.',
-            ),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
+      _showWarning('Все колоды уже выбраны. Освободите колоду или добавьте новую.');
       return;
     }
 

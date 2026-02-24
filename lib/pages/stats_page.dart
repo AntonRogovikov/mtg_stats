@@ -1,70 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/models/stats.dart';
-import 'package:mtg_stats/services/stats_service.dart';
+import 'package:mtg_stats/providers/stats_providers.dart';
 import 'package:mtg_stats/widgets/stats/stats.dart';
 
 enum StatsViewMode { list, histogram, pie, podium }
 
 /// Статистика игроков и колод: загрузка с API, виды (список, графики, подиум).
-class StatsPage extends StatefulWidget {
+class StatsPage extends ConsumerStatefulWidget {
   const StatsPage({super.key});
 
   @override
-  State<StatsPage> createState() => _StatsPageState();
+  ConsumerState<StatsPage> createState() => _StatsPageState();
 }
 
-class _StatsPageState extends State<StatsPage> {
-  final StatsService _statsService = StatsService();
-  List<PlayerStats>? _playerStats;
-  List<DeckStats>? _deckStats;
-  bool _loading = true;
-  String? _error;
+class _StatsPageState extends ConsumerState<StatsPage> {
   StatsViewMode _viewMode = StatsViewMode.list;
 
   @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final players = await _statsService.getPlayerStats();
-      final decks = await _statsService.getDeckStats();
-      if (mounted) {
-        setState(() {
-          _playerStats = List<PlayerStats>.from(players)
-            ..sort((a, b) {
-              final cmp = b.winPercent.compareTo(a.winPercent);
-              if (cmp != 0) return cmp;
-              return b.winsCount.compareTo(a.winsCount);
-            });
-          _deckStats = List<DeckStats>.from(decks)
-            ..sort((a, b) {
-              final cmp = b.winPercent.compareTo(a.winPercent);
-              if (cmp != 0) return cmp;
-              return b.winsCount.compareTo(a.winsCount);
-            });
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _loading = false;
-        });
-      }
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final statsAsync = ref.watch(statsDataProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Статистика', style: AppTheme.appBarTitle),
@@ -111,58 +68,58 @@ class _StatsPageState extends State<StatsPage> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _load,
+            onPressed: () => ref.invalidate(statsDataProvider),
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          _error!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _load,
-                          child: const Text('Повторить'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : DefaultTabController(
-                  length: 2,
-                  child: Column(
-                    children: [
-                      Material(
-                        color: Colors.white,
-                        child: TabBar(
-                          labelColor: Colors.blueGrey[900],
-                          tabs: const [
-                            Tab(text: 'Игроки'),
-                            Tab(text: 'Колоды'),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: TabBarView(
-                          children: [
-                            _buildPlayerView(),
-                            _buildDeckView(),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+      body: statsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  error.toString(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.red),
                 ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => ref.invalidate(statsDataProvider),
+                  child: const Text('Повторить'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        data: (statsData) => DefaultTabController(
+          length: 2,
+          child: Column(
+            children: [
+              Material(
+                color: Colors.white,
+                child: TabBar(
+                  labelColor: Colors.blueGrey[900],
+                  tabs: const [
+                    Tab(text: 'Игроки'),
+                    Tab(text: 'Колоды'),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _buildPlayerView(statsData.playerStats),
+                    _buildDeckView(statsData.deckStats),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -179,34 +136,33 @@ class _StatsPageState extends State<StatsPage> {
     }
   }
 
-  Widget _buildPlayerView() {
+  Widget _buildPlayerView(List<PlayerStats> playerStats) {
     switch (_viewMode) {
       case StatsViewMode.list:
-        return _buildPlayerStats();
+        return _buildPlayerStats(playerStats);
       case StatsViewMode.histogram:
-        return _buildPlayerHistogram();
+        return _buildPlayerHistogram(playerStats);
       case StatsViewMode.pie:
-        return _buildPlayerPie();
+        return _buildPlayerPie(playerStats);
       case StatsViewMode.podium:
-        return _buildPlayerPodium();
+        return _buildPlayerPodium(playerStats);
     }
   }
 
-  Widget _buildDeckView() {
+  Widget _buildDeckView(List<DeckStats> deckStats) {
     switch (_viewMode) {
       case StatsViewMode.list:
-        return _buildDeckStats();
+        return _buildDeckStats(deckStats);
       case StatsViewMode.histogram:
-        return _buildDeckHistogram();
+        return _buildDeckHistogram(deckStats);
       case StatsViewMode.pie:
-        return _buildDeckPie();
+        return _buildDeckPie(deckStats);
       case StatsViewMode.podium:
-        return _buildDeckPodium();
+        return _buildDeckPodium(deckStats);
     }
   }
 
-  Widget _buildPlayerStats() {
-    final list = _playerStats ?? [];
+  Widget _buildPlayerStats(List<PlayerStats> list) {
     if (list.isEmpty) {
       return const Center(
         child: Text(
@@ -272,8 +228,7 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
-  Widget _buildDeckStats() {
-    final list = _deckStats ?? [];
+  Widget _buildDeckStats(List<DeckStats> list) {
     if (list.isEmpty) {
       return const Center(
         child: Text(
@@ -303,8 +258,7 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
-  Widget _buildPlayerHistogram() {
-    final list = _playerStats ?? [];
+  Widget _buildPlayerHistogram(List<PlayerStats> list) {
     if (list.isEmpty) {
       return const Center(
         child: Text(
@@ -334,8 +288,7 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
-  Widget _buildDeckHistogram() {
-    final list = _deckStats ?? [];
+  Widget _buildDeckHistogram(List<DeckStats> list) {
     if (list.isEmpty) {
       return const Center(
         child: Text(
@@ -365,8 +318,7 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
-  Widget _buildPlayerPie() {
-    final list = _playerStats ?? [];
+  Widget _buildPlayerPie(List<PlayerStats> list) {
     if (list.isEmpty) {
       return const Center(
         child: Text(
@@ -399,8 +351,7 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
-  Widget _buildDeckPie() {
-    final list = _deckStats ?? [];
+  Widget _buildDeckPie(List<DeckStats> list) {
     if (list.isEmpty) {
       return const Center(
         child: Text(
@@ -433,8 +384,7 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
-  Widget _buildPlayerPodium() {
-    final list = _playerStats ?? [];
+  Widget _buildPlayerPodium(List<PlayerStats> list) {
     if (list.isEmpty) {
       return const Center(
         child: Text(
@@ -456,8 +406,7 @@ class _StatsPageState extends State<StatsPage> {
     );
   }
 
-  Widget _buildDeckPodium() {
-    final list = _deckStats ?? [];
+  Widget _buildDeckPodium(List<DeckStats> list) {
     if (list.isEmpty) {
       return const Center(
         child: Text(

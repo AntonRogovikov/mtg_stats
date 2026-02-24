@@ -3,32 +3,30 @@ import 'dart:math' show pi;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/core/constants.dart';
 import 'package:mtg_stats/core/format_utils.dart';
 import 'package:mtg_stats/core/platform_utils.dart';
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/models/game.dart';
+import 'package:mtg_stats/providers/active_game_provider.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/widgets/active_game/team_composition.dart';
 import 'package:mtg_stats/widgets/active_game/zone_expanded_deck_image.dart';
-import 'package:mtg_stats/services/deck_service.dart';
 import 'package:mtg_stats/services/game_manager.dart';
-import 'package:mtg_stats/services/game_service.dart';
 
 /// Активная партия: таймеры, ходы, завершение.
-class ActiveGamePage extends StatefulWidget {
+class ActiveGamePage extends ConsumerStatefulWidget {
   const ActiveGamePage({super.key});
 
   @override
-  State<ActiveGamePage> createState() => _ActiveGamePageState();
+  ConsumerState<ActiveGamePage> createState() => _ActiveGamePageState();
 }
 
-class _ActiveGamePageState extends State<ActiveGamePage> {
+class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
   Timer? _timer;
-  final GameService _gameService = GameService();
-  final DeckService _deckService = DeckService();
-  Map<int, Deck> _decksById = {};
+  bool _isTickRunning = false;
   final AudioPlayer _turnAudioPlayer = AudioPlayer();
   bool _soundEnabled = false;
   String? _playingTrack; // 'turn' | 'overtime' | null
@@ -51,7 +49,11 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
   void initState() {
     super.initState();
     _turnAudioPlayer.setReleaseMode(ReleaseMode.loop);
+    ref.read(activeGameControllerProvider.notifier).ensureDecksLoaded();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      if (_isTickRunning) return;
+      _isTickRunning = true;
+      try {
       if (!mounted) return;
       final game = GameManager.instance.activeGame;
       if (game == null) return;
@@ -90,20 +92,11 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
         _lastTeam2Seconds = team2Seconds;
         setState(() {});
       }
-      if (_decksById.isEmpty) _loadDecks();
       _syncTurnMusic();
-    });
-  }
-
-  Future<void> _loadDecks() async {
-    try {
-      final decks = await _deckService.getAllDecks();
-      if (mounted) {
-        setState(() {
-          _decksById = {for (final d in decks) d.id: d};
-        });
+      } finally {
+        _isTickRunning = false;
       }
-    } catch (_) {}
+    });
   }
 
   @override
@@ -185,8 +178,55 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     }
   }
 
+  void _showErrorSnackBar(ScaffoldMessengerState messenger, Object error) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Ошибка: $error'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  void _showFinishHint(BuildContext context, {required bool compactText}) {
+    final message = compactText
+        ? 'Удерживайте для завершения партии'
+        : 'Удерживайте кнопку для завершения партии';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _togglePauseWithFeedback(ScaffoldMessengerState messenger) async {
+    try {
+      await ref.read(activeGameControllerProvider.notifier).togglePause();
+      if (!mounted) return;
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      _showErrorSnackBar(messenger, e);
+    }
+  }
+
+  Future<void> _toggleTurnWithFeedback(ScaffoldMessengerState messenger) async {
+    try {
+      await ref.read(activeGameControllerProvider.notifier).toggleTurn();
+      if (!mounted) return;
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      _showErrorSnackBar(messenger, e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final decksById = ref.watch(
+      activeGameControllerProvider.select((state) => state.decksById),
+    );
+
     if (!ApiConfig.isAdmin) {
       return Scaffold(
         appBar: AppBar(
@@ -251,6 +291,10 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     final currentTeamName = GameManager.instance.currentTurnTeam == 1
         ? GameManager.instance.team1Name
         : GameManager.instance.team2Name;
+    final teamTotalTimeByNumber = <int, Duration>{
+      1: _teamTotalTurnDuration(game, 1),
+      2: _teamTotalTurnDuration(game, 2),
+    };
 
     final screenSize = MediaQuery.sizeOf(context);
     final buttonScale = (screenSize.shortestSide / 400).clamp(0.7, 1.5);
@@ -282,309 +326,68 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
               ],
             ),
       body: _useFaceToFaceView
-          ? _buildFaceToFaceBody(context, game)
+          ? _buildFaceToFaceBody(
+              context,
+              game,
+              decksById,
+              teamTotalTimeByNumber,
+            )
           : SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-            Card(
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Общее время игры',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            try {
-                              final updated = GameManager.instance.isPaused
-                                  ? await _gameService.resumeGame()
-                                  : await _gameService.pauseGame();
-                              if (mounted && updated != null) {
-                                GameManager.instance.setActiveGameFromApi(updated);
-                                setState(() {});
-                              }
-                            } catch (e) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Ошибка: $e'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            }
-                            if (mounted) setState(() {});
-                          },
-                          icon: Icon(
-                            GameManager.instance.isPaused
-                                ? Icons.play_arrow
-                                : Icons.pause,
-                          ),
-                          label: Text(
-                            GameManager.instance.isPaused ? 'Продолжить' : 'Пауза',
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: GameManager.instance.isPaused
-                                ? Colors.green
-                                : Colors.orange,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (GameManager.instance.isPaused)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Center(
-                          child: Text(
-                            'ПАУЗА',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.orange[800],
-                            ),
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: Text(
-                        FormatUtils.formatDuration(totalDuration),
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+            _TotalTimeCard(
+              totalDuration: totalDuration,
+              isPaused: GameManager.instance.isPaused,
+              onTogglePause: () => _togglePauseWithFeedback(
+                ScaffoldMessenger.of(context),
               ),
             ),
             if (hasTurnLimit) ...[
               const SizedBox(height: 16),
-              Card(
-                elevation: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: RichText(
-                              text: TextSpan(
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                ),
-                                children: [
-                                  const TextSpan(text: 'Ход: '),
-                                  TextSpan(
-                                    text: currentTeamName,
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: GameManager.instance.currentTurnTeam == 1
-                                          ? Colors.blue[800]
-                                          : Colors.green[800],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              _soundEnabled ? Icons.volume_up : Icons.volume_off,
-                              color: _soundEnabled ? null : Colors.grey,
-                            ),
-                            tooltip: _soundEnabled ? 'Выключить музыку' : 'Включить музыку хода',
-                            onPressed: () {
-                              setState(() => _soundEnabled = !_soundEnabled);
-                              _syncTurnMusic();
-                            },
-                          ),
-                        ],
-                      ),
-                      if (currentTurnTeamPlayers.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Text(
-                            currentTurnTeamPlayers.join(', '),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 8),
-                      Center(
-                        child: Text(
-                          FormatUtils.formatDuration(displayTurn),
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: isOvertime ? Colors.red : Colors.black,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Лимит хода: ${FormatUtils.formatDuration(limit)}',
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                        ],
-                      ),
-                      if (_overtimeMusicPending) ...[
-                        const SizedBox(height: 10),
-                        Center(
-                          child: OutlinedButton.icon(
-                            onPressed: _playOvertimeMusicFromGesture,
-                            icon: const Icon(Icons.music_note, size: 20),
-                            label: const Text('Включить музыку перерасхода'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.red[700],
-                              side: BorderSide(color: Colors.red[700]!),
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Center(
-                        child: ElevatedButton(
-                          onPressed: GameManager.instance.isPaused
-                              ? null
-                              : () async {
-                            final g = GameManager.instance.activeGame;
-                            if (g == null) return;
-                            try {
-                              Game? updated;
-                              if (GameManager.instance.isTurnRunning) {
-                                // Закончить ход и начать ход противника — сначала API, потом состояние.
-                                final turnStart = GameManager.instance.currentTurnStart!;
-                                final now = DateTime.now();
-                                final elapsed = now.difference(turnStart);
-                                final limit = Duration(seconds: GameManager.instance.turnLimitSeconds);
-                                final overtime = GameManager.instance.turnLimitSeconds > 0 && elapsed > limit
-                                    ? elapsed - limit
-                                    : Duration.zero;
-                                final newTurn = GameTurn(
-                                  teamNumber: GameManager.instance.currentTurnTeam,
-                                  duration: elapsed,
-                                  overtime: overtime,
-                                );
-                                final newTurns = [...g.turns, newTurn];
-                                final newTeam = GameManager.instance.currentTurnTeam == 1 ? 2 : 1;
-                                updated = await _gameService.updateActiveGame(g, newTeam, now, newTurns);
-                              } else {
-                                // Начать ход — отдельный эндпоинт, сервер ставит время (сохраняется при перезагрузке).
-                                updated = await _gameService.startTurn();
-                              }
-                              if (mounted && updated != null) {
-                                GameManager.instance.setActiveGameFromApi(updated);
-                              }
-                            } catch (e) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Ошибка: $e'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            }
-                            if (mounted) setState(() {});
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                GameManager.instance.isTurnRunning
-                                    ? Colors.orange
-                                    : Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: classicButtonPadding,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Text(
-                            GameManager.instance.isTurnRunning
-                                ? 'Закончить ход'
-                                : 'Начать ход',
-                            style: TextStyle(fontSize: classicButtonFontSize),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+              _TurnControlCard(
+                currentTeamName: currentTeamName,
+                currentTurnTeam: GameManager.instance.currentTurnTeam,
+                currentTurnTeamPlayers: currentTurnTeamPlayers,
+                soundEnabled: _soundEnabled,
+                onToggleSound: () {
+                  setState(() => _soundEnabled = !_soundEnabled);
+                  _syncTurnMusic();
+                },
+                displayTurn: displayTurn,
+                isOvertime: isOvertime,
+                limit: limit,
+                overtimeMusicPending: _overtimeMusicPending,
+                onPlayOvertimeMusicFromGesture: _playOvertimeMusicFromGesture,
+                isPaused: GameManager.instance.isPaused,
+                isTurnRunning: GameManager.instance.isTurnRunning,
+                onToggleTurn: () => _toggleTurnWithFeedback(
+                  ScaffoldMessenger.of(context),
                 ),
+                classicButtonPadding: classicButtonPadding,
+                classicButtonFontSize: classicButtonFontSize,
               ),
             ],
             const SizedBox(height: 16),
-            Card(
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Команды и состав',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildTeamSection(context, game, 1),
-                    const SizedBox(height: 12),
-                    _buildTeamSection(context, game, 2),
-                  ],
-                ),
+            _TeamCompositionCard(
+              team1Section: _buildTeamSection(
+                context,
+                game,
+                1,
+                teamTotalTimeByNumber[1]!,
+              ),
+              team2Section: _buildTeamSection(
+                context,
+                game,
+                2,
+                teamTotalTimeByNumber[2]!,
               ),
             ),
             const SizedBox(height: 24),
-            GestureDetector(
+            _FinishGameActionButton(
               onLongPress: () => _finishGame(context),
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Удерживайте кнопку для завершения партии'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
-              child: AbsorbPointer(
-                child: ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.flag),
-                  label: const Text('Завершить партию'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red[700],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
+              onTapHint: () => _showFinishHint(context, compactText: false),
             ),
           ],
           ),
@@ -593,16 +396,14 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
   }
 
   Future<void> _finishGameTechnicalDefeat(BuildContext context, int winningTeam) async {
-    final game = GameManager.instance.activeGame;
-    if (game == null) return;
-    try {
-      await _gameService.finishGame(game.id, winningTeam,
-          isTechnicalDefeat: true);
-    } catch (_) {}
-    GameManager.instance.finishGame(winningTeam: winningTeam);
-    GameManager.instance.clearActiveGame();
+    if (GameManager.instance.activeGame == null) return;
+    final navigator = Navigator.of(context);
+    await ref.read(activeGameControllerProvider.notifier).finishGame(
+          winningTeam: winningTeam,
+          isTechnicalDefeat: true,
+        );
     if (mounted) {
-      Navigator.of(context).pop();
+      navigator.pop();
     }
   }
 
@@ -622,13 +423,18 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     return total;
   }
 
-  Widget _buildFaceToFaceBody(BuildContext context, Game game) {
+  Widget _buildFaceToFaceBody(
+    BuildContext context,
+    Game game,
+    Map<int, Deck> decksById,
+    Map<int, Duration> teamTotalTimeByNumber,
+  ) {
     const baseTeam1Color = Colors.blue;
     const baseTeam2Color = Colors.green;
     final team1Name = GameManager.instance.team1Name;
     final team2Name = GameManager.instance.team2Name;
-    final team1TotalTime = _teamTotalTurnDuration(game, 1);
-    final team2TotalTime = _teamTotalTurnDuration(game, 2);
+    final team1TotalTime = teamTotalTimeByNumber[1] ?? Duration.zero;
+    final team2TotalTime = teamTotalTimeByNumber[2] ?? Duration.zero;
     final teamLimit = GameManager.instance.teamTimeLimitSeconds;
     const warningThreshold = Duration(seconds: 30); // для теста; было 5 мин
     final isTeam1TimeWarning = teamLimit > 0 &&
@@ -664,33 +470,67 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                 flex: 1,
                 child: Transform.rotate(
                   angle: pi,
-                  child: _buildFaceToFaceZone(
+                  child: _FaceToFaceZone(
                     game: game,
                     teamNumber: 1,
                     teamName: team1Name,
                     color: team1Color,
                     isActive: isTeam1Active,
                     isTurnRunning: isTurnRunning,
+                    isPaused: GameManager.instance.isPaused,
                     nameAtTop: true,
                     showComposition: true,
                     useDeckAvatars: true,
-                    decksById: _decksById,
+                    decksById: decksById,
+                    expandedDeck: _expandedDeckTeamNumber == 1 ? _expandedDeck : null,
+                    onDeckTap: (deck) {
+                      setState(() {
+                        _expandedDeck = deck;
+                        _expandedDeckTeamNumber = 1;
+                      });
+                    },
+                    onCloseExpandedDeck: () {
+                      setState(() {
+                        _expandedDeck = null;
+                        _expandedDeckTeamNumber = null;
+                      });
+                    },
+                    onToggleTurn: () => _toggleTurnWithFeedback(
+                      ScaffoldMessenger.of(context),
+                    ),
                   ),
                 ),
               ),
               Expanded(
                 flex: 1,
-                child: _buildFaceToFaceZone(
+                child: _FaceToFaceZone(
                   game: game,
                   teamNumber: 2,
                   teamName: team2Name,
                   color: team2Color,
                   isActive: isTeam2Active,
                   isTurnRunning: isTurnRunning,
+                  isPaused: GameManager.instance.isPaused,
                   nameAtTop: true,
                   showComposition: true,
                   useDeckAvatars: true,
-                  decksById: _decksById,
+                  decksById: decksById,
+                  expandedDeck: _expandedDeckTeamNumber == 2 ? _expandedDeck : null,
+                  onDeckTap: (deck) {
+                    setState(() {
+                      _expandedDeck = deck;
+                      _expandedDeckTeamNumber = 2;
+                    });
+                  },
+                  onCloseExpandedDeck: () {
+                    setState(() {
+                      _expandedDeck = null;
+                      _expandedDeckTeamNumber = null;
+                    });
+                  },
+                  onToggleTurn: () => _toggleTurnWithFeedback(
+                    ScaffoldMessenger.of(context),
+                  ),
                 ),
               ),
             ],
@@ -710,7 +550,521 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     required MaterialColor team2Color,
     required bool panelOnLeft,
   }) {
+    return _FaceToFaceSidePanel(
+      team1TotalTime: team1TotalTime,
+      team2TotalTime: team2TotalTime,
+      totalDuration: totalDuration,
+      team1Color: team1Color,
+      team2Color: team2Color,
+      panelOnLeft: panelOnLeft,
+      soundEnabled: _soundEnabled,
+      isPaused: GameManager.instance.isPaused,
+      onTogglePanelSide: () {
+        setState(() => _panelOnLeft = !_panelOnLeft);
+      },
+      onSwitchToClassicView: () {
+        setState(() => _useFaceToFaceView = false);
+      },
+      onToggleSound: () {
+        setState(() => _soundEnabled = !_soundEnabled);
+        _syncTurnMusic();
+      },
+      onTogglePause: () async {
+        await _togglePauseWithFeedback(ScaffoldMessenger.of(context));
+      },
+      onFinishLongPress: () => _finishGame(context),
+      onFinishTapHint: () => _showFinishHint(context, compactText: true),
+    );
+  }
+
+  Future<void> _finishGame(BuildContext context) async {
+    final navigator = Navigator.of(context);
+    final team1Name = GameManager.instance.team1Name;
+    final team2Name = GameManager.instance.team2Name;
+
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => _WinningTeamDialog(
+        team1Name: team1Name,
+        team2Name: team2Name,
+      ),
+    );
+
+    if (result != null) {
+      await ref.read(activeGameControllerProvider.notifier).finishGame(
+            winningTeam: result,
+          );
+      if (mounted) {
+        navigator.pop();
+      }
+    }
+  }
+
+  List<String> _teamPlayers(Game game, int teamNumber) {
+    final ps = game.players;
+    if (ps.isEmpty) return [];
+    final half = ps.length ~/ 2;
+    if (teamNumber == 1) {
+      return ps.take(half).map((p) => p.userName).toList();
+    }
+    return ps.skip(half).map((p) => p.userName).toList();
+  }
+
+  Widget _buildTeamSection(
+    BuildContext context,
+    Game game,
+    int teamNumber,
+    Duration teamTotalTime,
+  ) {
+    final half = game.players.length ~/ 2;
+    final teamPlayers = game.players.asMap().entries.where(
+          (e) => (teamNumber == 1 && e.key < half) || (teamNumber == 2 && e.key >= half),
+        ).map((e) => e.value).toList();
+    final teamName = teamNumber == 1
+        ? GameManager.instance.team1Name
+        : GameManager.instance.team2Name;
+    final teamLimit = GameManager.instance.teamTimeLimitSeconds;
+    final isTimeWarning = teamLimit > 0 &&
+        (Duration(seconds: teamLimit) - teamTotalTime) <= const Duration(seconds: 30) && // для теста; было 5 мин
+        teamTotalTime < Duration(seconds: teamLimit);
+    final teamColor = isTimeWarning ? Colors.red : (teamNumber == 1 ? Colors.blue : Colors.green);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                teamName,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: teamColor[800],
+                ),
+              ),
+            ),
+            if (teamLimit > 0)
+              Text(
+                '${FormatUtils.formatDuration(teamTotalTime)} / ${FormatUtils.formatDuration(Duration(seconds: teamLimit))}',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: isTimeWarning ? Colors.red[700] : Colors.grey[700],
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ...teamPlayers.map(
+          (p) => Padding(
+            padding: const EdgeInsets.only(left: 8.0, bottom: 4.0),
+            child: Row(
+              children: [
+                Icon(Icons.person_outline, size: 18, color: Colors.grey[600]),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    p.userName,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+                Text(
+                  p.deckName,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TotalTimeCard extends StatelessWidget {
+  const _TotalTimeCard({
+    required this.totalDuration,
+    required this.isPaused,
+    required this.onTogglePause,
+  });
+
+  final Duration totalDuration;
+  final bool isPaused;
+  final VoidCallback onTogglePause;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Общее время игры',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: onTogglePause,
+                  icon: Icon(isPaused ? Icons.play_arrow : Icons.pause),
+                  label: Text(isPaused ? 'Продолжить' : 'Пауза'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isPaused ? Colors.green : Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            if (isPaused)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Center(
+                  child: Text(
+                    'ПАУЗА',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange[800],
+                    ),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            Center(
+              child: Text(
+                FormatUtils.formatDuration(totalDuration),
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TurnControlCard extends StatelessWidget {
+  const _TurnControlCard({
+    required this.currentTeamName,
+    required this.currentTurnTeam,
+    required this.currentTurnTeamPlayers,
+    required this.soundEnabled,
+    required this.onToggleSound,
+    required this.displayTurn,
+    required this.isOvertime,
+    required this.limit,
+    required this.overtimeMusicPending,
+    required this.onPlayOvertimeMusicFromGesture,
+    required this.isPaused,
+    required this.isTurnRunning,
+    required this.onToggleTurn,
+    required this.classicButtonPadding,
+    required this.classicButtonFontSize,
+  });
+
+  final String currentTeamName;
+  final int currentTurnTeam;
+  final List<String> currentTurnTeamPlayers;
+  final bool soundEnabled;
+  final VoidCallback onToggleSound;
+  final Duration displayTurn;
+  final bool isOvertime;
+  final Duration limit;
+  final bool overtimeMusicPending;
+  final VoidCallback onPlayOvertimeMusicFromGesture;
+  final bool isPaused;
+  final bool isTurnRunning;
+  final VoidCallback onToggleTurn;
+  final EdgeInsetsGeometry classicButtonPadding;
+  final double classicButtonFontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: RichText(
+                    text: TextSpan(
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                      children: [
+                        const TextSpan(text: 'Ход: '),
+                        TextSpan(
+                          text: currentTeamName,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: currentTurnTeam == 1
+                                ? Colors.blue[800]
+                                : Colors.green[800],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    soundEnabled ? Icons.volume_up : Icons.volume_off,
+                    color: soundEnabled ? null : Colors.grey,
+                  ),
+                  tooltip: soundEnabled
+                      ? 'Выключить музыку'
+                      : 'Включить музыку хода',
+                  onPressed: onToggleSound,
+                ),
+              ],
+            ),
+            if (currentTurnTeamPlayers.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Text(
+                  currentTurnTeamPlayers.join(', '),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            Center(
+              child: Text(
+                FormatUtils.formatDuration(displayTurn),
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: isOvertime ? Colors.red : Colors.black,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                Text(
+                  'Лимит хода: ${FormatUtils.formatDuration(limit)}',
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ],
+            ),
+            if (overtimeMusicPending) ...[
+              const SizedBox(height: 10),
+              Center(
+                child: OutlinedButton.icon(
+                  onPressed: onPlayOvertimeMusicFromGesture,
+                  icon: const Icon(Icons.music_note, size: 20),
+                  label: const Text('Включить музыку перерасхода'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red[700],
+                    side: BorderSide(color: Colors.red[700]!),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Center(
+              child: ElevatedButton(
+                onPressed: isPaused ? null : onToggleTurn,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isTurnRunning ? Colors.orange : Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: classicButtonPadding,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(
+                  isTurnRunning ? 'Закончить ход' : 'Начать ход',
+                  style: TextStyle(fontSize: classicButtonFontSize),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FinishGameActionButton extends StatelessWidget {
+  const _FinishGameActionButton({
+    required this.onLongPress,
+    required this.onTapHint,
+  });
+
+  final VoidCallback onLongPress;
+  final VoidCallback onTapHint;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onLongPress: onLongPress,
+      onTap: onTapHint,
+      child: AbsorbPointer(
+        child: ElevatedButton.icon(
+          onPressed: () {},
+          icon: const Icon(Icons.flag),
+          label: const Text('Завершить партию'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red[700],
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WinningTeamDialog extends StatefulWidget {
+  const _WinningTeamDialog({
+    required this.team1Name,
+    required this.team2Name,
+  });
+
+  final String team1Name;
+  final String team2Name;
+
+  @override
+  State<_WinningTeamDialog> createState() => _WinningTeamDialogState();
+}
+
+class _WinningTeamDialogState extends State<_WinningTeamDialog> {
+  int? _selectedTeam = 1;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Кто победил?'),
+      content: RadioGroup<int>(
+        groupValue: _selectedTeam,
+        onChanged: (value) {
+          setState(() => _selectedTeam = value);
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<int>(title: Text(widget.team1Name), value: 1),
+            RadioListTile<int>(title: Text(widget.team2Name), value: 2),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Отмена'),
+        ),
+        TextButton(
+          onPressed: _selectedTeam == null
+              ? null
+              : () => Navigator.of(context).pop(_selectedTeam),
+          child: const Text('Сохранить'),
+        ),
+      ],
+    );
+  }
+}
+
+class _TeamCompositionCard extends StatelessWidget {
+  const _TeamCompositionCard({
+    required this.team1Section,
+    required this.team2Section,
+  });
+
+  final Widget team1Section;
+  final Widget team2Section;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Команды и состав',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            team1Section,
+            const SizedBox(height: 12),
+            team2Section,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FaceToFaceSidePanel extends StatelessWidget {
+  const _FaceToFaceSidePanel({
+    required this.team1TotalTime,
+    required this.team2TotalTime,
+    required this.totalDuration,
+    required this.team1Color,
+    required this.team2Color,
+    required this.panelOnLeft,
+    required this.soundEnabled,
+    required this.isPaused,
+    required this.onTogglePanelSide,
+    required this.onSwitchToClassicView,
+    required this.onToggleSound,
+    required this.onTogglePause,
+    required this.onFinishLongPress,
+    required this.onFinishTapHint,
+  });
+
+  final Duration team1TotalTime;
+  final Duration team2TotalTime;
+  final Duration totalDuration;
+  final MaterialColor team1Color;
+  final MaterialColor team2Color;
+  final bool panelOnLeft;
+  final bool soundEnabled;
+  final bool isPaused;
+  final VoidCallback onTogglePanelSide;
+  final VoidCallback onSwitchToClassicView;
+  final VoidCallback onToggleSound;
+  final Future<void> Function() onTogglePause;
+  final VoidCallback onFinishLongPress;
+  final VoidCallback onFinishTapHint;
+
+  @override
+  Widget build(BuildContext context) {
     final timerAngle = pi / 2 + (panelOnLeft ? pi : 0);
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final panelWidth = (screenWidth * 0.12).clamp(50.0, 80.0);
+
     final blueTimer = FittedBox(
       fit: BoxFit.scaleDown,
       child: Transform.rotate(
@@ -726,25 +1080,23 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
         ),
       ),
     );
-    final totalTimer = LayoutBuilder(
-      builder: (context, constraints) {
-        return FittedBox(
-          fit: BoxFit.none,
-          child: Transform.rotate(
-            angle: timerAngle,
-            child: Text(
-              FormatUtils.formatDuration(totalDuration),
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-              softWrap: false,
-            ),
+
+    final totalTimerText = FittedBox(
+      fit: BoxFit.none,
+      child: Transform.rotate(
+        angle: timerAngle,
+        child: Text(
+          FormatUtils.formatDuration(totalDuration),
+          style: const TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
           ),
-        );
-      },
+          softWrap: false,
+        ),
+      ),
     );
+
     final greenTimer = FittedBox(
       fit: BoxFit.scaleDown,
       child: Transform.rotate(
@@ -760,125 +1112,6 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
         ),
       ),
     );
-    final buttons = Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Tooltip(
-            message: _panelOnLeft ? 'Панель справа' : 'Панель слева',
-            child: IconButton(
-              icon: Icon(
-                _panelOnLeft ? Icons.arrow_forward : Icons.arrow_back,
-                color: AppTheme.appBarForeground,
-                size: 22,
-              ),
-              style: IconButton.styleFrom(
-                padding: const EdgeInsets.all(8),
-                minimumSize: const Size(40, 40),
-              ),
-              onPressed: () {
-                setState(() => _panelOnLeft = !_panelOnLeft);
-              },
-            ),
-          ),
-          Tooltip(
-            message: 'Стандартный режим',
-            child: IconButton(
-              icon: Icon(
-                Icons.flip_to_front,
-                color: AppTheme.appBarForeground,
-                size: 22,
-              ),
-              style: IconButton.styleFrom(
-                padding: const EdgeInsets.all(8),
-                minimumSize: const Size(40, 40),
-              ),
-              onPressed: () {
-                setState(() => _useFaceToFaceView = false);
-              },
-            ),
-          ),
-          Tooltip(
-            message: _soundEnabled ? 'Выключить музыку' : 'Включить музыку хода',
-            child: IconButton(
-              icon: Icon(
-                _soundEnabled ? Icons.volume_up : Icons.volume_off,
-                color: _soundEnabled ? AppTheme.appBarForeground : Colors.grey,
-                size: 22,
-              ),
-              style: IconButton.styleFrom(
-                padding: const EdgeInsets.all(8),
-                minimumSize: const Size(40, 40),
-              ),
-              onPressed: () {
-                setState(() => _soundEnabled = !_soundEnabled);
-                _syncTurnMusic();
-              },
-            ),
-          ),
-          Tooltip(
-            message: GameManager.instance.isPaused ? 'Продолжить' : 'Пауза',
-            child: IconButton(
-              icon: Icon(
-                GameManager.instance.isPaused ? Icons.play_arrow : Icons.pause,
-                color: AppTheme.appBarForeground,
-                size: 22,
-              ),
-              style: IconButton.styleFrom(
-                padding: const EdgeInsets.all(8),
-                minimumSize: const Size(40, 40),
-              ),
-              onPressed: () async {
-                try {
-                  final updated = GameManager.instance.isPaused
-                      ? await _gameService.resumeGame()
-                      : await _gameService.pauseGame();
-                  if (mounted && updated != null) {
-                    GameManager.instance.setActiveGameFromApi(updated);
-                    setState(() {});
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Ошибка: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-                if (mounted) setState(() {});
-              },
-            ),
-          ),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onLongPress: () => _finishGame(context),
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Удерживайте для завершения партии'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
-              borderRadius: BorderRadius.circular(4),
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.red[700]!.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Icon(Icons.flag, color: Colors.white, size: 26),
-              ),
-            ),
-          ),
-        ],
-      );
-
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final panelWidth = (screenWidth * 0.12).clamp(50.0, 80.0);
 
     return Container(
       width: panelWidth,
@@ -889,54 +1122,134 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
         bottom: true,
         child: Column(
           children: [
-            SizedBox(height: 100),
+            const SizedBox(height: 100),
             Expanded(
-              flex: 1,
               child: Center(child: blueTimer),
             ),
             Center(
               child: SizedBox(
                 width: panelWidth,
                 height: 120,
-                child: totalTimer,
+                child: totalTimerText,
               ),
             ),
             Expanded(
-              flex: 1,
               child: Center(child: greenTimer),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: buttons,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Tooltip(
+                    message: panelOnLeft ? 'Панель справа' : 'Панель слева',
+                    child: IconButton(
+                      icon: Icon(
+                        panelOnLeft ? Icons.arrow_forward : Icons.arrow_back,
+                        color: AppTheme.appBarForeground,
+                        size: 22,
+                      ),
+                      onPressed: onTogglePanelSide,
+                    ),
+                  ),
+                  Tooltip(
+                    message: 'Стандартный режим',
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.flip_to_front,
+                        color: AppTheme.appBarForeground,
+                        size: 22,
+                      ),
+                      onPressed: onSwitchToClassicView,
+                    ),
+                  ),
+                  Tooltip(
+                    message: soundEnabled ? 'Выключить музыку' : 'Включить музыку хода',
+                    child: IconButton(
+                      icon: Icon(
+                        soundEnabled ? Icons.volume_up : Icons.volume_off,
+                        color: soundEnabled ? AppTheme.appBarForeground : Colors.grey,
+                        size: 22,
+                      ),
+                      onPressed: onToggleSound,
+                    ),
+                  ),
+                  Tooltip(
+                    message: isPaused ? 'Продолжить' : 'Пауза',
+                    child: IconButton(
+                      icon: Icon(
+                        isPaused ? Icons.play_arrow : Icons.pause,
+                        color: AppTheme.appBarForeground,
+                        size: 22,
+                      ),
+                      onPressed: () async {
+                        await onTogglePause();
+                      },
+                    ),
+                  ),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onLongPress: onFinishLongPress,
+                      onTap: onFinishTapHint,
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.red[700]!.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Icon(Icons.flag, color: Colors.white, size: 26),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  List<GamePlayer> _teamPlayersWithDecks(Game game, int teamNumber) {
-    final half = game.players.length ~/ 2;
-    return game.players.asMap().entries
-        .where((e) =>
-            (teamNumber == 1 && e.key < half) ||
-            (teamNumber == 2 && e.key >= half))
-        .map((e) => e.value)
-        .toList();
-  }
+class _FaceToFaceZone extends StatelessWidget {
+  const _FaceToFaceZone({
+    required this.game,
+    required this.teamNumber,
+    required this.teamName,
+    required this.color,
+    required this.isActive,
+    required this.isTurnRunning,
+    required this.isPaused,
+    required this.nameAtTop,
+    required this.showComposition,
+    required this.useDeckAvatars,
+    required this.decksById,
+    required this.expandedDeck,
+    required this.onDeckTap,
+    required this.onCloseExpandedDeck,
+    required this.onToggleTurn,
+  });
 
-  Widget _buildFaceToFaceZone({
-    required Game game,
-    required int teamNumber,
-    required String teamName,
-    required MaterialColor color,
-    required bool isActive,
-    required bool isTurnRunning,
-    required bool nameAtTop,
-    required bool showComposition,
-    bool useDeckAvatars = false,
-    Map<int, Deck> decksById = const {},
-  }) {
+  final Game game;
+  final int teamNumber;
+  final String teamName;
+  final MaterialColor color;
+  final bool isActive;
+  final bool isTurnRunning;
+  final bool isPaused;
+  final bool nameAtTop;
+  final bool showComposition;
+  final bool useDeckAvatars;
+  final Map<int, Deck> decksById;
+  final Deck? expandedDeck;
+  final ValueChanged<Deck> onDeckTap;
+  final VoidCallback onCloseExpandedDeck;
+  final VoidCallback onToggleTurn;
+
+  @override
+  Widget build(BuildContext context) {
     final nameWidget = Text(
       teamName,
       style: TextStyle(
@@ -946,6 +1259,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
       ),
       textAlign: TextAlign.center,
     );
+
     final screenSize = MediaQuery.sizeOf(context);
     final scale = (screenSize.shortestSide / 400).clamp(0.7, 1.5);
     final buttonPadding = EdgeInsets.symmetric(
@@ -955,48 +1269,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
     final buttonFontSize = (16 * scale).clamp(14.0, 22.0);
 
     final buttonWidget = ElevatedButton(
-      onPressed: isActive && !GameManager.instance.isPaused
-          ? () async {
-              final g = GameManager.instance.activeGame;
-              if (g == null) return;
-              try {
-                Game? updated;
-                if (isTurnRunning) {
-                  final turnStart = GameManager.instance.currentTurnStart!;
-                  final now = DateTime.now();
-                  final elapsed = now.difference(turnStart);
-                  final limit = Duration(seconds: game.turnLimitSeconds);
-                  final overtime = game.turnLimitSeconds > 0 && elapsed > limit
-                      ? elapsed - limit
-                      : Duration.zero;
-                  final newTurn = GameTurn(
-                    teamNumber: GameManager.instance.currentTurnTeam,
-                    duration: elapsed,
-                    overtime: overtime,
-                  );
-                  final newTurns = [...g.turns, newTurn];
-                  final newTeam = GameManager.instance.currentTurnTeam == 1 ? 2 : 1;
-                  updated = await _gameService.updateActiveGame(g, newTeam, now, newTurns);
-                } else {
-                  updated = await _gameService.startTurn();
-                }
-                if (mounted && updated != null) {
-                  GameManager.instance.setActiveGameFromApi(updated);
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      
-                      content: Text('Ошибка: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-              if (mounted) setState(() {});
-            }
-          : null,
+      onPressed: isActive && !isPaused ? onToggleTurn : null,
       style: ElevatedButton.styleFrom(
         backgroundColor: isTurnRunning ? Colors.orange : Colors.green,
         foregroundColor: Colors.white,
@@ -1081,96 +1354,89 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
         child: Stack(
           children: [
             LayoutBuilder(
-                builder: (context, zoneConstraints) {
-                  final compositionWithZoneHeight = showComposition && useDeckAvatars
-                      ? Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.max,
-                            children: [
-                              TeamComposition(
-                                teamPlayers: teamPlayers,
-                                color: color,
-                                decksById: decksById,
-                                onDeckTap: (deck) {
-                                  setState(() {
-                                    _expandedDeck = deck;
-                                    _expandedDeckTeamNumber = teamNumber;
-                                  });
-                                },
-                              ),
-                              if (timerWidget != null) ...[
-                                const SizedBox(height: 8),
-                                timerWidget,
-                              ],
+              builder: (context, zoneConstraints) {
+                final compositionWithZoneHeight = showComposition && useDeckAvatars
+                    ? Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.max,
+                          children: [
+                            TeamComposition(
+                              teamPlayers: teamPlayers,
+                              color: color,
+                              decksById: decksById,
+                              onDeckTap: onDeckTap,
+                            ),
+                            if (timerWidget != null) ...[
                               const SizedBox(height: 8),
-                              SizedBox(
-                                width: double.infinity,
-                                child: isActive
-                                    ? buttonWidget
-                                    : Opacity(
-                                        opacity: 0.5,
-                                        child: buttonWidget,
-                                      ),
-                              ),
+                              timerWidget,
                             ],
-                          ),
-                        )
-                      : compositionWidget;
-                  return Column(
-                    mainAxisAlignment: nameAtTop ? MainAxisAlignment.start : MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: nameAtTop
-                        ? [
-                            nameWidget,
-                            compositionWithZoneHeight,
-                            if (!useDeckAvatars) ...[
-                              const Spacer(),
-                              if (timerWidget != null) ...[
-                                timerWidget,
-                                const SizedBox(height: 8),
-                              ],
-                              isActive
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: isActive
                                   ? buttonWidget
                                   : Opacity(
                                       opacity: 0.5,
                                       child: buttonWidget,
                                     ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : compositionWidget;
+
+                return Column(
+                  mainAxisAlignment: nameAtTop
+                      ? MainAxisAlignment.start
+                      : MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: nameAtTop
+                      ? [
+                          nameWidget,
+                          compositionWithZoneHeight,
+                          if (!useDeckAvatars) ...[
+                            const Spacer(),
+                            if (timerWidget != null) ...[
+                              timerWidget,
+                              const SizedBox(height: 8),
                             ],
-                          ]
-                        : [
                             isActive
                                 ? buttonWidget
                                 : Opacity(
                                     opacity: 0.5,
                                     child: buttonWidget,
                                   ),
-                            const SizedBox(height: 16),
-                            nameWidget,
-                            compositionWidget,
                           ],
-                  );
-                },
-              ),
-            if (_expandedDeck != null && _expandedDeckTeamNumber == teamNumber)
+                        ]
+                      : [
+                          isActive
+                              ? buttonWidget
+                              : Opacity(
+                                  opacity: 0.5,
+                                  child: buttonWidget,
+                                ),
+                          const SizedBox(height: 16),
+                          nameWidget,
+                          compositionWidget,
+                        ],
+                );
+              },
+            ),
+            if (expandedDeck != null)
               Positioned.fill(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _expandedDeck = null;
-                          _expandedDeckTeamNumber = null;
-                        });
-                      },
+                      onTap: onCloseExpandedDeck,
                       child: Container(
                         color: Colors.black87,
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
                             ZoneExpandedDeckImage(
-                              deck: _expandedDeck!,
+                              deck: expandedDeck!,
                               maxWidth: constraints.maxWidth,
                             ),
                             Positioned(
@@ -1182,12 +1448,7 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
                                   color: Colors.white,
                                   size: 28,
                                 ),
-                                onPressed: () {
-                                  setState(() {
-                                    _expandedDeck = null;
-                                    _expandedDeckTeamNumber = null;
-                                  });
-                                },
+                                onPressed: onCloseExpandedDeck,
                               ),
                             ),
                           ],
@@ -1202,144 +1463,14 @@ class _ActiveGamePageState extends State<ActiveGamePage> {
       ),
     );
   }
+}
 
-  Future<void> _finishGame(BuildContext context) async {
-    int? selectedTeam = 1;
-    final navigator = Navigator.of(context);
-
-    final result = await showDialog<int>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Кто победил?'),
-          content: StatefulBuilder(
-            builder: (context, setState) {
-              final team1Name = GameManager.instance.team1Name;
-              final team2Name = GameManager.instance.team2Name;
-              return RadioGroup<int>(
-                groupValue: selectedTeam,
-                onChanged: (value) {
-                  setState(() {
-                    selectedTeam = value;
-                  });
-                },
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    RadioListTile<int>(title: Text(team1Name), value: 1),
-                    RadioListTile<int>(title: Text(team2Name), value: 2),
-                  ],
-                ),
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Отмена'),
-            ),
-            TextButton(
-              onPressed: selectedTeam == null
-                  ? null
-                  : () => Navigator.of(context).pop(selectedTeam),
-              child: const Text('Сохранить'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (result != null) {
-      final game = GameManager.instance.activeGame;
-      if (game != null) {
-        try {
-          await _gameService.finishGame(game.id, result);
-        } catch (_) {}
-      }
-      GameManager.instance.finishGame(winningTeam: result);
-      GameManager.instance.clearActiveGame();
-      if (mounted) {
-        navigator.pop();
-      }
-    }
-  }
-
-  List<String> _teamPlayers(Game game, int teamNumber) {
-    final ps = game.players;
-    if (ps.isEmpty) return [];
-    final half = ps.length ~/ 2;
-    if (teamNumber == 1) {
-      return ps.take(half).map((p) => p.userName).toList();
-    }
-    return ps.skip(half).map((p) => p.userName).toList();
-  }
-
-  Widget _buildTeamSection(BuildContext context, Game game, int teamNumber) {
-    final half = game.players.length ~/ 2;
-    final teamPlayers = game.players.asMap().entries.where(
-          (e) => (teamNumber == 1 && e.key < half) || (teamNumber == 2 && e.key >= half),
-        ).map((e) => e.value).toList();
-    final teamName = teamNumber == 1
-        ? GameManager.instance.team1Name
-        : GameManager.instance.team2Name;
-    final teamTotalTime = _teamTotalTurnDuration(game, teamNumber);
-    final teamLimit = GameManager.instance.teamTimeLimitSeconds;
-    final isTimeWarning = teamLimit > 0 &&
-        (Duration(seconds: teamLimit) - teamTotalTime) <= const Duration(seconds: 30) && // для теста; было 5 мин
-        teamTotalTime < Duration(seconds: teamLimit);
-    final teamColor = isTimeWarning ? Colors.red : (teamNumber == 1 ? Colors.blue : Colors.green);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                teamName,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: teamColor[800],
-                ),
-              ),
-            ),
-            if (teamLimit > 0)
-              Text(
-                '${FormatUtils.formatDuration(teamTotalTime)} / ${FormatUtils.formatDuration(Duration(seconds: teamLimit))}',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: isTimeWarning ? Colors.red[700] : Colors.grey[700],
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ...teamPlayers.map(
-          (p) => Padding(
-            padding: const EdgeInsets.only(left: 8.0, bottom: 4.0),
-            child: Row(
-              children: [
-                Icon(Icons.person_outline, size: 18, color: Colors.grey[600]),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    p.userName,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                ),
-                Text(
-                  p.deckName,
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+List<GamePlayer> _teamPlayersWithDecks(Game game, int teamNumber) {
+  final half = game.players.length ~/ 2;
+  return game.players.asMap().entries
+      .where((e) =>
+          (teamNumber == 1 && e.key < half) || (teamNumber == 2 && e.key >= half))
+      .map((e) => e.value)
+      .toList();
 }
 

@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/data/fun_team_names.dart';
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/models/game.dart';
@@ -8,30 +9,20 @@ import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/models/user.dart';
 import 'package:mtg_stats/pages/active_game_page.dart';
 import 'package:mtg_stats/pages/deck_selection_page.dart';
-import 'package:mtg_stats/services/deck_service.dart';
+import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/services/game_manager.dart';
-import 'package:mtg_stats/services/game_service.dart';
 import 'package:mtg_stats/services/api_config.dart';
-import 'package:mtg_stats/services/user_service.dart';
 
 /// Настройка новой партии: команды, первый ход, колоды игроков.
-class GamePage extends StatefulWidget {
+class GamePage extends ConsumerStatefulWidget {
   const GamePage({super.key});
 
   @override
-  State<GamePage> createState() => _GamePageState();
+  ConsumerState<GamePage> createState() => _GamePageState();
 }
 
-class _GamePageState extends State<GamePage> {
-  List<User> _users = [];
-  bool _isUsersLoading = true;
-  bool _isUsersError = false;
-
+class _GamePageState extends ConsumerState<GamePage> {
   final Random _random = Random();
-  final DeckService _deckService = DeckService();
-  List<Deck> _allDecks = [];
-  bool _isDecksLoading = true;
-  bool _isDecksError = false;
   final Map<String, Deck> _userDecks = {};
 
   final List<User> _team1 = [];
@@ -48,16 +39,12 @@ class _GamePageState extends State<GamePage> {
     60, 1800, 3600, 5400, 7200, 9000, 10800,
   ]; // 60 сек — тест, потом убрать; 30мин..3ч
 
-  final GameService _gameService = GameService();
-
   /// Пока true — показываем загрузку вместо формы, чтобы не мелькала страница настроек при редиректе на активную игру.
   bool _isCheckingActiveGame = true;
 
   @override
   void initState() {
     super.initState();
-    _getAllDecks();
-    _getUsers();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       if (GameManager.instance.hasActiveGame) {
@@ -69,7 +56,7 @@ class _GamePageState extends State<GamePage> {
         return;
       }
       try {
-        final active = await _gameService.getActiveGame();
+        final active = await ref.read(gameServiceProvider).getActiveGame();
         if (mounted && active != null) {
           GameManager.instance.setActiveGameFromApi(active);
           Navigator.of(context).pushReplacement(
@@ -101,70 +88,11 @@ class _GamePageState extends State<GamePage> {
     super.dispose();
   }
 
-  Future<void> _getUsers() async {
-    setState(() {
-      _isUsersLoading = true;
-      _isUsersError = false;
-    });
-    try {
-      final loadedUsers = await UserService().getUsers();
-      if (mounted) {
-        setState(() {
-          _users = loadedUsers;
-          _isUsersLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _users = [];
-          _isUsersLoading = false;
-          _isUsersError = true;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ошибка при загрузке пользователей'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _getAllDecks() async {
-    setState(() {
-      _isDecksLoading = true;
-      _isDecksError = false;
-    });
-
-    try {
-      final loadedDecks = await _deckService.getAllDecks();
-      setState(() {
-        _allDecks = loadedDecks;
-        _isDecksLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _allDecks = [];
-        _isDecksLoading = false;
-        _isDecksError = true;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ошибка при загрузке списка колод'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  void _randomizeTeams() {
+  void _randomizeTeams(List<User> users) {
     setState(() {
       _team1.clear();
       _team2.clear();
-      final usersCopy = List<User>.from(_users);
+      final usersCopy = List<User>.from(users);
       usersCopy.shuffle(_random);
       for (int i = 0; i < usersCopy.length; i++) {
         if (i < 2) {
@@ -182,7 +110,7 @@ class _GamePageState extends State<GamePage> {
     });
   }
 
-  Future<void> _startGame() async {
+  Future<void> _startGame(List<User> users) async {
     if (GameManager.instance.hasActiveGame) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -210,7 +138,7 @@ class _GamePageState extends State<GamePage> {
       return;
     }
 
-    for (final user in _users) {
+    for (final user in users) {
       if (_userDecks[user.id] == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -264,7 +192,8 @@ class _GamePageState extends State<GamePage> {
     );
 
     try {
-      final created = await _gameService.createGame(stubGame);
+      final gameService = ref.read(gameServiceProvider);
+      final created = await gameService.createGame(stubGame);
       if (!mounted) return;
       GameManager.instance.setActiveGameFromApi(created);
       GameManager.instance.setTeamNames(
@@ -273,7 +202,7 @@ class _GamePageState extends State<GamePage> {
       );
       // Автоматически начинаем первый ход, чтобы время команд пошло сразу.
       try {
-        final withTurn = await _gameService.startTurn();
+        final withTurn = await gameService.startTurn();
         if (mounted && withTurn != null) {
           GameManager.instance.setActiveGameFromApi(withTurn);
         }
@@ -335,6 +264,15 @@ class _GamePageState extends State<GamePage> {
 
   @override
   Widget build(BuildContext context) {
+    final usersAsync = ref.watch(usersProvider);
+    final decksAsync = ref.watch(decksProvider);
+    final users = usersAsync.asData?.value ?? const <User>[];
+    final allDecks = decksAsync.asData?.value ?? const <Deck>[];
+    final isUsersLoading = usersAsync.isLoading;
+    final isUsersError = usersAsync.hasError;
+    final isDecksLoading = decksAsync.isLoading;
+    final isDecksError = decksAsync.hasError;
+
     if (!ApiConfig.isAdmin) {
       return _buildAdminRequired();
     }
@@ -360,7 +298,7 @@ class _GamePageState extends State<GamePage> {
           padding: const EdgeInsets.all(16.0),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            if (_isUsersLoading)
+            if (isUsersLoading)
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -376,7 +314,7 @@ class _GamePageState extends State<GamePage> {
                   ),
                 ),
               )
-            else if (_isUsersError)
+            else if (isUsersError)
               Card(
                 color: Colors.red[50],
                 child: Padding(
@@ -393,7 +331,7 @@ class _GamePageState extends State<GamePage> {
                       ),
                       const SizedBox(height: 8),
                       TextButton.icon(
-                        onPressed: _getUsers,
+                        onPressed: () => ref.invalidate(usersProvider),
                         icon: const Icon(Icons.refresh),
                         label: const Text('Повторить'),
                       ),
@@ -401,7 +339,7 @@ class _GamePageState extends State<GamePage> {
                   ),
                 ),
               )
-            else if (_users.isEmpty)
+            else if (users.isEmpty)
               Card(
                 color: Colors.orange[50],
                 child: Padding(
@@ -445,7 +383,7 @@ class _GamePageState extends State<GamePage> {
                           ),
                           const Spacer(),
                           IconButton(
-                              onPressed: _randomizeTeams,
+                              onPressed: () => _randomizeTeams(users),
                               icon: const Icon(Icons.shuffle),
                               color: Colors.amber[800],
                               style: IconButton.styleFrom(
@@ -458,11 +396,13 @@ class _GamePageState extends State<GamePage> {
                     _buildTeamSection(
                         title: 'Команда 1',
                         teamNumber: 1,
+                        users: users,
                         selectedUsers: _team1),
                     const Divider(),
                     _buildTeamSection(
                         title: 'Команда 2',
                         teamNumber: 2,
+                        users: users,
                         selectedUsers: _team2),
                   ],
                 ),
@@ -471,9 +411,14 @@ class _GamePageState extends State<GamePage> {
             const SizedBox(height: 32),
             _buildFirstMoveSection(),
             const SizedBox(height: 32),
-            _buildUserDeckSelectionSection(),
+            _buildUserDeckSelectionSection(
+              users: users,
+              isDecksLoading: isDecksLoading,
+              isDecksError: isDecksError,
+              allDecks: allDecks,
+            ),
             const SizedBox(height: 32),
-            _buildTurnSettingsSection(),
+            _buildTurnSettingsSection(users),
             ],
           ])),
     );
@@ -482,6 +427,7 @@ class _GamePageState extends State<GamePage> {
   Widget _buildTeamSection(
       {required String title,
       required int teamNumber,
+      required List<User> users,
       required List<User> selectedUsers}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(
@@ -499,9 +445,9 @@ class _GamePageState extends State<GamePage> {
             mainAxisSpacing: 8,
             childAspectRatio: 3,
           ),
-          itemCount: _users.length,
+          itemCount: users.length,
           itemBuilder: (context, index) {
-            final user = _users[index];
+            final user = users[index];
             final isSelected = selectedUsers.contains(user);
             final isDisabled = !isSelected && !_canSelectUser(user, teamNumber);
 
@@ -612,7 +558,7 @@ class _GamePageState extends State<GamePage> {
     );
   }
 
-  Widget _buildTurnSettingsSection() {
+  Widget _buildTurnSettingsSection(List<User> users) {
     return Card(
       elevation: 2,
       child: Padding(
@@ -730,7 +676,7 @@ class _GamePageState extends State<GamePage> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: _startGame,
+                onPressed: () => _startGame(users),
                 icon: const Icon(Icons.play_arrow),
                 label: const Text('Начать игру'),
                 style: ElevatedButton.styleFrom(
@@ -829,7 +775,7 @@ class _GamePageState extends State<GamePage> {
     }
   }
 
-  Future<void> _openDeckSelectionPage() async {
+  Future<void> _openDeckSelectionPage(List<Deck> allDecks) async {
     if (_team1.length != 2 || _team2.length != 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -839,7 +785,7 @@ class _GamePageState extends State<GamePage> {
       );
       return;
     }
-    if (_allDecks.isEmpty) {
+    if (allDecks.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Нет доступных колод. Создайте колоды на экране "Колоды".'),
@@ -854,7 +800,7 @@ class _GamePageState extends State<GamePage> {
         builder: (context) => DeckSelectionPage(
           team1: List.from(_team1),
           team2: List.from(_team2),
-          allDecks: List.from(_allDecks),
+          allDecks: List.from(allDecks),
           initialUserDecks: Map.from(_userDecks),
         ),
       ),
@@ -868,9 +814,14 @@ class _GamePageState extends State<GamePage> {
     }
   }
 
-  Widget _buildUserDeckSelectionSection() {
+  Widget _buildUserDeckSelectionSection({
+    required List<User> users,
+    required bool isDecksLoading,
+    required bool isDecksError,
+    required List<Deck> allDecks,
+  }) {
     final teamsReady = _team1.length == 2 && _team2.length == 2;
-    final canSelectDecks = teamsReady && !_isDecksLoading && _allDecks.isNotEmpty;
+    final canSelectDecks = teamsReady && !isDecksLoading && allDecks.isNotEmpty;
 
     return Card(
       elevation: 2,
@@ -887,9 +838,9 @@ class _GamePageState extends State<GamePage> {
               ),
             ),
             const SizedBox(height: 12),
-            if (_isDecksLoading)
+            if (isDecksLoading)
               const Center(child: CircularProgressIndicator())
-            else if (_isDecksError || _allDecks.isEmpty)
+            else if (isDecksError || allDecks.isEmpty)
               const Text(
                 'Колоды недоступны. Проверьте подключение или создайте колоды на экране "Колоды".',
                 style: TextStyle(color: Colors.redAccent),
@@ -898,7 +849,7 @@ class _GamePageState extends State<GamePage> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: canSelectDecks ? _openDeckSelectionPage : null,
+                  onPressed: canSelectDecks ? () => _openDeckSelectionPage(allDecks) : null,
                   icon: const Icon(Icons.collections_bookmark),
                   label: const Text('Выбрать колоды'),
                   style: ElevatedButton.styleFrom(
@@ -920,7 +871,7 @@ class _GamePageState extends State<GamePage> {
                   ),
                 ),
               const SizedBox(height: 16),
-              _buildUserDecksSummary(),
+              _buildUserDecksSummary(users),
             ],
           ],
         ),
@@ -928,7 +879,7 @@ class _GamePageState extends State<GamePage> {
     );
   }
 
-  Widget _buildUserDecksSummary() {
+  Widget _buildUserDecksSummary(List<User> users) {
     if (_userDecks.isEmpty) {
       return const Text(
         'Колоды ещё не выбраны. Нажмите «Выбрать колоды» для назначения.',
@@ -936,7 +887,7 @@ class _GamePageState extends State<GamePage> {
       );
     }
 
-    final userById = {for (final u in _users) u.id: u};
+    final userById = {for (final u in users) u.id: u};
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

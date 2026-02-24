@@ -33,6 +33,9 @@ dependencies:
   # Диалоги выбора файла/пути для бэкапов
   file_selector: ^1.0.3
 
+  # State management
+  flutter_riverpod: ^3.2.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

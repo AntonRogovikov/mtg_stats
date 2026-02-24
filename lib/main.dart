@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/pages/decks_page.dart';
@@ -19,7 +20,11 @@ void main() async {
     setUrlStrategy(PathUrlStrategy());
   }
   await ApiConfig.load();
-  runApp(const MyApp());
+  runApp(
+    const ProviderScope(
+      child: MyApp(),
+    ),
+  );
 }
 
 /// Корневой виджет приложения: MaterialApp с named routes, AppTheme, ResponsiveWebLayout.

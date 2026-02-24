@@ -3,57 +3,70 @@ import 'dart:typed_data';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/core/ui_feedback.dart';
 import 'package:mtg_stats/pages/home_page.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
-import 'package:mtg_stats/services/auth_service.dart';
 import 'package:mtg_stats/services/health_service.dart';
-import 'package:mtg_stats/services/maintenance_service.dart';
 
 /// Настройки: URL бэкенда, вход, экспорт/импорт.
-class SettingsPage extends StatefulWidget {
+class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
   @override
-  State<SettingsPage> createState() => _SettingsPageState();
+  ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage> {
+class _SettingsPageState extends ConsumerState<SettingsPage> {
   late TextEditingController _urlController;
   late TextEditingController _tokenController;
+  late TextEditingController _timezoneController;
   late TextEditingController _loginNameController;
   late TextEditingController _loginPasswordController;
   bool _saving = false;
   bool _loggingIn = false;
-  final MaintenanceService _maintenanceService = MaintenanceService();
-  final AuthService _authService = AuthService();
   bool _exporting = false;
   bool _importing = false;
   bool _clearingGames = false;
   bool _checkingHealth = false;
+  bool _loadingTimezone = false;
+  bool _savingTimezone = false;
+  int? _timezoneOffsetMinutes;
   HealthResult? _healthResult;
   @override
   void initState() {
     super.initState();
     _urlController = TextEditingController(text: ApiConfig.baseUrl);
     _tokenController = TextEditingController(text: ApiConfig.apiToken);
+    _timezoneController = TextEditingController();
     _loginNameController = TextEditingController();
     _loginPasswordController = TextEditingController();
+    if (ApiConfig.isAdmin) {
+      _loadTimezoneSettings();
+    }
   }
 
   @override
   void dispose() {
     _urlController.dispose();
     _tokenController.dispose();
+    _timezoneController.dispose();
     _loginNameController.dispose();
     _loginPasswordController.dispose();
     super.dispose();
+  }
+
+  void _showSnack(SnackBar snackBar) {
+    if (!mounted) return;
+    UiFeedback.showRawSnack(context, snackBar);
   }
 
   Future<void> _login() async {
     final name = _loginNameController.text.trim();
     final password = _loginPasswordController.text;
     if (name.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showSnack(
         const SnackBar(
           content: Text('Введите имя и пароль'),
           backgroundColor: Colors.orange,
@@ -63,7 +76,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     setState(() => _loggingIn = true);
     try {
-      final result = await _authService.login(name, password);
+      final result = await ref.read(authServiceProvider).login(name, password);
       await ApiConfig.setJwt(
         result.token,
         userId: result.userId,
@@ -72,8 +85,11 @@ class _SettingsPageState extends State<SettingsPage> {
       );
       if (mounted) {
         setState(() => _loggingIn = false);
+        if (result.isAdmin) {
+          _loadTimezoneSettings();
+        }
         _loginPasswordController.clear();
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showSnack(
           SnackBar(
             content: Text(
               result.isAdmin
@@ -91,7 +107,7 @@ class _SettingsPageState extends State<SettingsPage> {
     } catch (e) {
       if (mounted) {
         setState(() => _loggingIn = false);
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showSnack(
           SnackBar(
             content: Text('Ошибка входа: $e'),
             backgroundColor: Colors.red,
@@ -107,7 +123,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _healthResult = null;
     });
     try {
-      final result = await HealthService().check();
+      final result = await ref.read(healthServiceProvider).check();
       if (mounted) {
         setState(() {
           _checkingHealth = false;
@@ -128,10 +144,71 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _loadTimezoneSettings() async {
+    if (!ApiConfig.isAdmin) return;
+    setState(() => _loadingTimezone = true);
+    try {
+      final settings = await ref.read(appSettingsServiceProvider).getSettings();
+      if (!mounted) return;
+      setState(() {
+        _timezoneController.text = settings.timezone;
+        _timezoneOffsetMinutes = settings.timezoneOffsetMinutes;
+      });
+      ref.invalidate(appSettingsProvider);
+    } catch (_) {
+      // Не блокируем страницу настроек, если загрузка timezone временно недоступна.
+    } finally {
+      if (mounted) {
+        setState(() => _loadingTimezone = false);
+      }
+    }
+  }
+
+  Future<void> _saveTimezoneSettings() async {
+    if (!ApiConfig.isAdmin) return;
+    final timezone = _timezoneController.text.trim();
+    if (timezone.isEmpty) {
+      UiFeedback.showWarning(context, 'Введите timezone, например Europe/Moscow');
+      return;
+    }
+    setState(() => _savingTimezone = true);
+    try {
+      final settings = await ref
+          .read(appSettingsServiceProvider)
+          .updateTimezone(timezone);
+      if (!mounted) return;
+      setState(() {
+        _timezoneController.text = settings.timezone;
+        _timezoneOffsetMinutes = settings.timezoneOffsetMinutes;
+      });
+      ref.invalidate(appSettingsProvider);
+      UiFeedback.showSuccess(
+        context,
+        'Timezone сохранен: ${settings.timezone} (UTC${_formatOffset(settings.timezoneOffsetMinutes)})',
+      );
+    } catch (e) {
+      if (mounted) {
+        UiFeedback.showError(context, 'Не удалось сохранить timezone: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _savingTimezone = false);
+      }
+    }
+  }
+
+  String _formatOffset(int minutes) {
+    final sign = minutes >= 0 ? '+' : '-';
+    final abs = minutes.abs();
+    final h = abs ~/ 60;
+    final m = abs % 60;
+    return '$sign${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _logout() async {
     await ApiConfig.clearJwt();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showSnack(
         const SnackBar(
           content: Text('Вы вышли из учётной записи'),
           backgroundColor: Colors.grey,
@@ -152,7 +229,7 @@ class _SettingsPageState extends State<SettingsPage> {
       await ApiConfig.setBaseUrl(url);
       await ApiConfig.setApiToken(token);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showSnack(
           SnackBar(
             content: Text(
               url.isEmpty
@@ -165,7 +242,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showSnack(
           SnackBar(
             content: Text('Ошибка: $e'),
             backgroundColor: Colors.red,
@@ -233,7 +310,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
     setState(() => _exporting = true);
     try {
-      final bytes = await _maintenanceService.downloadBackup(
+      final maintenanceService = ref.read(maintenanceServiceProvider);
+      final bytes = await maintenanceService.downloadBackup(
         includePasswords: includePasswords,
       );
       final file = XFile.fromData(
@@ -243,7 +321,7 @@ class _SettingsPageState extends State<SettingsPage> {
       );
       await file.saveTo(location.path);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showSnack(
           const SnackBar(
             content: Text('Экспорт данных выполнен успешно'),
             backgroundColor: Colors.green,
@@ -252,7 +330,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showSnack(
           SnackBar(
             content: Text('Не удалось экспортировать данные: $e'),
             backgroundColor: Colors.red,
@@ -288,10 +366,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
     setState(() => _importing = true);
     try {
+      final maintenanceService = ref.read(maintenanceServiceProvider);
       final bytes = await file.readAsBytes();
-      await _maintenanceService.importBackupArchive(bytes);
+      await maintenanceService.importBackupArchive(bytes);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showSnack(
           const SnackBar(
             content: Text('Импорт данных выполнен успешно'),
             backgroundColor: Colors.green,
@@ -300,7 +379,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showSnack(
           SnackBar(
             content: Text('Не удалось импортировать данные: $e'),
             backgroundColor: Colors.red,
@@ -454,9 +533,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
     setState(() => _clearingGames = true);
     try {
-      await _maintenanceService.clearGames();
+      await ref.read(maintenanceServiceProvider).clearGames();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showSnack(
           const SnackBar(
             content: Text('Таблицы игр и ходов успешно очищены'),
             backgroundColor: Colors.green,
@@ -465,7 +544,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showSnack(
           SnackBar(
             content: Text('Не удалось очистить игры: $e'),
             backgroundColor: Colors.red,
@@ -634,6 +713,74 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
               ],
+              const SizedBox(height: 24),
+              Text(
+                'Часовой пояс приложения',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blueGrey[800],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Все даты в интерфейсе будут отображаться в этом timezone.',
+                style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _timezoneController,
+                decoration: InputDecoration(
+                  hintText: 'Например: Europe/Moscow',
+                  suffixIcon: _loadingTimezone
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: Padding(
+                            padding: EdgeInsets.all(12),
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                ),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _saveTimezoneSettings(),
+              ),
+              if (_timezoneOffsetMinutes != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Текущий сдвиг: UTC${_formatOffset(_timezoneOffsetMinutes!)}',
+                  style: TextStyle(fontSize: 13, color: Colors.blueGrey[700]),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _savingTimezone ? null : _saveTimezoneSettings,
+                    icon: _savingTimezone
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.schedule, size: 18),
+                    label: Text(
+                      _savingTimezone ? 'Сохранение...' : 'Сохранить timezone',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  TextButton(
+                    onPressed: _loadingTimezone ? null : _loadTimezoneSettings,
+                    child: const Text('Обновить'),
+                  ),
+                ],
+              ),
               const SizedBox(height: 24),
               Text(
                 'API токен',

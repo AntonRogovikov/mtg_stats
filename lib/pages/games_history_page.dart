@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/core/format_utils.dart';
+import 'package:mtg_stats/core/timezone_utils.dart';
 import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/pages/deck_card_page.dart';
+import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/services/deck_service.dart';
 import 'package:mtg_stats/services/game_service.dart';
 
 /// Страница истории партий: список завершённых игр.
-class GamesHistoryPage extends StatefulWidget {
+class GamesHistoryPage extends ConsumerStatefulWidget {
   const GamesHistoryPage({super.key});
 
   @override
-  State<GamesHistoryPage> createState() => _GamesHistoryPageState();
+  ConsumerState<GamesHistoryPage> createState() => _GamesHistoryPageState();
 }
 
-class _GamesHistoryPageState extends State<GamesHistoryPage> {
+class _GamesHistoryPageState extends ConsumerState<GamesHistoryPage> {
   final GameService _gameService = GameService();
   final TextEditingController _searchController = TextEditingController();
   List<Game> _games = [];
@@ -35,13 +38,16 @@ class _GamesHistoryPageState extends State<GamesHistoryPage> {
     super.dispose();
   }
 
-  List<Game> get _filteredGames {
+  List<Game> _filteredGames(int timezoneOffsetMinutes) {
     final query = _searchController.text.trim().toLowerCase();
     if (query.isEmpty) return _games;
     return _games.where((g) {
       final team1 = (g.team1Name ?? 'Команда 1').toLowerCase();
       final team2 = (g.team2Name ?? 'Команда 2').toLowerCase();
-      final dateStr = _formatDate(g.startTime).toLowerCase();
+      final dateStr = _formatDate(
+        g.startTime,
+        timezoneOffsetMinutes: timezoneOffsetMinutes,
+      ).toLowerCase();
       if (g.id.toLowerCase().contains(query)) return true;
       if (team1.contains(query) || team2.contains(query)) return true;
       if (dateStr.contains(query)) return true;
@@ -88,11 +94,15 @@ class _GamesHistoryPageState extends State<GamesHistoryPage> {
     'пятница', 'суббота', 'воскресенье',
   ];
 
-  String _formatDate(DateTime dt) {
-    final weekday = _weekdayNames[dt.weekday - 1];
-    return '${dt.day.toString().padLeft(2, '0')}.'
-        '${dt.month.toString().padLeft(2, '0')}.'
-        '${dt.year} ($weekday)';
+  String _formatDate(DateTime dt, {required int timezoneOffsetMinutes}) {
+    final localDt = TimezoneUtils.toConfiguredTimezone(
+      dt,
+      timezoneOffsetMinutes: timezoneOffsetMinutes,
+    );
+    final weekday = _weekdayNames[localDt.weekday - 1];
+    return '${localDt.day.toString().padLeft(2, '0')}.'
+        '${localDt.month.toString().padLeft(2, '0')}.'
+        '${localDt.year} ($weekday)';
   }
 
   static final _headerStyle = TextStyle(
@@ -101,9 +111,9 @@ class _GamesHistoryPageState extends State<GamesHistoryPage> {
     fontSize: 14,
   );
 
-  Widget _buildGameHeader(Game g) {
+  Widget _buildGameHeader(Game g, {required int timezoneOffsetMinutes}) {
     return Text(
-      '${_formatDate(g.startTime)} №${g.id}',
+      '${_formatDate(g.startTime, timezoneOffsetMinutes: timezoneOffsetMinutes)} №${g.id}',
       style: _headerStyle,
     );
   }
@@ -218,6 +228,8 @@ class _GamesHistoryPageState extends State<GamesHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final timezoneOffsetMinutes =
+        ref.watch(appSettingsProvider).asData?.value.timezoneOffsetMinutes ?? 0;
     return Scaffold(
       appBar: AppBar(
         title: Text('История партий', style: AppTheme.appBarTitle),
@@ -256,14 +268,18 @@ class _GamesHistoryPageState extends State<GamesHistoryPage> {
             ),
           ),
           if (!_loading && _games.isNotEmpty) _buildGamesHeader(),
-          Expanded(child: _buildBody()),
+          Expanded(
+            child: _buildBody(timezoneOffsetMinutes: timezoneOffsetMinutes),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildGamesHeader() {
-    final filteredCount = _filteredGames.length;
+    final timezoneOffsetMinutes =
+        ref.watch(appSettingsProvider).asData?.value.timezoneOffsetMinutes ?? 0;
+    final filteredCount = _filteredGames(timezoneOffsetMinutes).length;
     final isSearching = _searchController.text.trim().isNotEmpty;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -288,7 +304,7 @@ class _GamesHistoryPageState extends State<GamesHistoryPage> {
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody({required int timezoneOffsetMinutes}) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -332,7 +348,7 @@ class _GamesHistoryPageState extends State<GamesHistoryPage> {
         ),
       );
     }
-    final filtered = _filteredGames;
+    final filtered = _filteredGames(timezoneOffsetMinutes);
     if (filtered.isEmpty) {
       return Center(
         child: Column(
@@ -370,7 +386,10 @@ class _GamesHistoryPageState extends State<GamesHistoryPage> {
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildGameHeader(game),
+                  _buildGameHeader(
+                    game,
+                    timezoneOffsetMinutes: timezoneOffsetMinutes,
+                  ),
                   const SizedBox(height: 4),
                   _buildGameTitle(game),
                   const Divider(),  
@@ -381,7 +400,10 @@ class _GamesHistoryPageState extends State<GamesHistoryPage> {
                 children: _buildPlayersByTeam(game),
               ),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openGameDetail(game),
+              onTap: () => _openGameDetail(
+                game,
+                timezoneOffsetMinutes: timezoneOffsetMinutes,
+              ),
             ),
           );
         },
@@ -389,10 +411,13 @@ class _GamesHistoryPageState extends State<GamesHistoryPage> {
     );
   }
 
-  void _openGameDetail(Game game) {
+  void _openGameDetail(Game game, {required int timezoneOffsetMinutes}) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => GameDetailPage(game: game),
+        builder: (_) => GameDetailPage(
+          game: game,
+          timezoneOffsetMinutes: timezoneOffsetMinutes,
+        ),
       ),
     );
   }
@@ -405,15 +430,24 @@ const _team2Color = Colors.green;
 /// Детальный просмотр партии.
 class GameDetailPage extends StatelessWidget {
   final Game game;
+  final int timezoneOffsetMinutes;
 
-  const GameDetailPage({super.key, required this.game});
+  const GameDetailPage({
+    super.key,
+    required this.game,
+    required this.timezoneOffsetMinutes,
+  });
 
-  static String _formatDateTime(DateTime dt) {
-    return '${dt.day.toString().padLeft(2, '0')}.'
-        '${dt.month.toString().padLeft(2, '0')}.'
-        '${dt.year} '
-        '${dt.hour.toString().padLeft(2, '0')}:'
-        '${dt.minute.toString().padLeft(2, '0')}';
+  String _formatDateTime(DateTime dt) {
+    final localDt = TimezoneUtils.toConfiguredTimezone(
+      dt,
+      timezoneOffsetMinutes: timezoneOffsetMinutes,
+    );
+    return '${localDt.day.toString().padLeft(2, '0')}.'
+        '${localDt.month.toString().padLeft(2, '0')}.'
+        '${localDt.year} '
+        '${localDt.hour.toString().padLeft(2, '0')}:'
+        '${localDt.minute.toString().padLeft(2, '0')}';
   }
 
   static const _weekdayNames = [
@@ -421,11 +455,15 @@ class GameDetailPage extends StatelessWidget {
     'пятница', 'суббота', 'воскресенье',
   ];
 
-  static String _formatDateWithWeekday(DateTime dt) {
-    final weekday = _weekdayNames[dt.weekday - 1];
-    return '${dt.day.toString().padLeft(2, '0')}.'
-        '${dt.month.toString().padLeft(2, '0')}.'
-        '${dt.year} ($weekday)';
+  String _formatDateWithWeekday(DateTime dt) {
+    final localDt = TimezoneUtils.toConfiguredTimezone(
+      dt,
+      timezoneOffsetMinutes: timezoneOffsetMinutes,
+    );
+    final weekday = _weekdayNames[localDt.weekday - 1];
+    return '${localDt.day.toString().padLeft(2, '0')}.'
+        '${localDt.month.toString().padLeft(2, '0')}.'
+        '${localDt.year} ($weekday)';
   }
 
   @override
@@ -766,7 +804,8 @@ class _DeckLink extends StatelessWidget {
         ),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
         SnackBar(
           content: Text('Не удалось загрузить колоду «$deckName»'),
           backgroundColor: Colors.orange,

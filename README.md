@@ -70,9 +70,9 @@ mtg_stats/
 
 ## Архитектура
 
-- **Паттерн:** MVC-подобный: страницы (StatefulWidget), сервисы, модели.
+- **Паттерн:** UI + сервисы + модели, постепенная миграция на Riverpod.
 - **Маршрутизация:** Named routes в MaterialApp.
-- **Состояние:** GameManager — синглтон для активной игры; ApiConfig — статическая конфигурация; setState в виджетах.
+- **Состояние:** Riverpod для загрузки/сервисов (`providers/*`) + `GameManager` для активной игры (переходный этап).
 - **Бэкенд:** REST API (пакет http), baseUrl и auth через ApiConfig.
 
 ## Платформы
@@ -90,6 +90,33 @@ flutter run
 ```bash
 flutter run -d chrome --dart-define=BASE_URL=https://your-backend.com
 ```
+
+Для web с API токеном:
+```bash
+flutter run -d chrome \
+  --dart-define=BASE_URL=https://your-backend.com \
+  --dart-define=API_TOKEN=your-token
+```
+
+## GitHub Pages и API_TOKEN
+
+Для деплоя через GitHub Actions:
+
+1. В репозитории откройте `Settings -> Secrets and variables -> Actions`.
+2. Создайте:
+   - `Variables`: `BASE_URL` (например, `https://your-backend.com`)
+   - `Secrets`: `API_TOKEN` (если нужен fallback-токен)
+3. Workflow `deploy.yml` автоматически подставляет их в:
+   - `--dart-define=BASE_URL=...`
+   - `--dart-define=API_TOKEN=...`
+
+Важно: для Flutter Web любые `--dart-define` попадают в собранный JS и могут быть извлечены пользователем.
+Поэтому в GitHub Pages нельзя хранить "настоящий секретный" API токен безопасно.
+
+Рекомендуемая практика:
+- использовать JWT после логина как основной механизм авторизации;
+- `API_TOKEN` делать только техническим/public fallback с ограниченными правами;
+- для действительно секретных ключей использовать backend proxy (секрет хранится только на сервере).
 
 ## Зависимости
 

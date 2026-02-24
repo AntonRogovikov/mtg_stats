@@ -32,11 +32,16 @@ jobs:
       run: flutter config --enable-web
     
     - name: Build Flutter Web
+      env:
+        BASE_URL: ${{ vars.BASE_URL }}
+        API_TOKEN: ${{ secrets.API_TOKEN }}
       run: |
         # Убедитесь что base-href соответствует имени репозитория
         flutter clean
         flutter build web \
           --release \
+          --dart-define=BASE_URL=${BASE_URL} \
+          --dart-define=API_TOKEN=${API_TOKEN} \
           --base-href /mtg_stats/
         # Добавляем fallback для GitHub Pages, чтобы роуты без # не ломались при прямом переходе
         cp build/web/index.html build/web/404.html

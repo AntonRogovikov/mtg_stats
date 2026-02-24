@@ -2,28 +2,29 @@ import 'dart:math';
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/core/constants.dart';
+import 'package:mtg_stats/core/ui_feedback.dart';
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/pages/deck_card_page.dart';
 import 'package:mtg_stats/pages/full_screen_image_page.dart';
+import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
-import 'package:mtg_stats/services/deck_service.dart';
 import 'package:mtg_stats/widgets/deck_card.dart';
 
 /// Список колод: CRUD, кубики для выбора, открытие карточки колоды.
-class DeckListPage extends StatefulWidget {
+class DeckListPage extends ConsumerStatefulWidget {
   const DeckListPage({super.key});
 
   @override
-  State<DeckListPage> createState() => _DeckListPageState();
+  ConsumerState<DeckListPage> createState() => _DeckListPageState();
 }
 
-class _DeckListPageState extends State<DeckListPage> {
+class _DeckListPageState extends ConsumerState<DeckListPage> {
   List<Deck> decks = [];
   bool _isLoading = true;
   int? _selectedDeckIndex;
-  late DeckService _deckService;
 
   int _firstDiceValue = 1;
   int _secondDiceValue = 1;
@@ -52,7 +53,6 @@ class _DeckListPageState extends State<DeckListPage> {
   @override
   void initState() {
     super.initState();
-    _deckService = DeckService();
     _initializeSecureRandom();
     _getAllDecks();
   }
@@ -65,9 +65,14 @@ class _DeckListPageState extends State<DeckListPage> {
     super.dispose();
   }
 
+  void _showErrorSnack(String message) {
+    if (!mounted) return;
+    UiFeedback.showError(context, message);
+  }
+
   Future<void> _getAllDecks() async {
     try {
-      final loadedDecks = await _deckService.getAllDecks();
+      final loadedDecks = await ref.read(deckServiceProvider).getAllDecks();
       setState(() {
         decks = loadedDecks;
         _isLoading = false;
@@ -77,54 +82,33 @@ class _DeckListPageState extends State<DeckListPage> {
         decks = [];
         _isLoading = false;
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка при загрузке списка колод'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showErrorSnack('Ошибка при загрузке списка колод');
     }
   }
 
   Future<void> _createDeck(String name) async {
     try {
-      final newDeck = await _deckService.createDeck(name);
+      final newDeck = await ref.read(deckServiceProvider).createDeck(name);
       if (mounted) {
         setState(() {
           decks.add(newDeck);
         });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка при добавлении колоды'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showErrorSnack('Ошибка при добавлении колоды');
     }
   }
 
   Future<void> _deleteDeck(int id) async {
     try {
-      await _deckService.deleteDeck(id);
+      await ref.read(deckServiceProvider).deleteDeck(id);
       if (mounted) {
         setState(() {
           decks.removeWhere((deck) => deck.id == id);
         });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка при удалении колоды'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showErrorSnack('Ошибка при удалении колоды');
     }
   }
 
@@ -799,13 +783,14 @@ class _DeckListPageState extends State<DeckListPage> {
                 leading: Icon(Icons.badge, color: Colors.blue),
                 title: Text('Открыть'),
                 onTap: () {
+                  final deckService = ref.read(deckServiceProvider);
                   Navigator.pop(context);
                   Navigator.push<Deck>(
                     context,
                     MaterialPageRoute(
                       builder: (context) => DeckCardPage(
                         deck: deck,
-                        deckService: _deckService,
+                        deckService: deckService,
                         readOnly: !ApiConfig.isAdmin,
                       ),
                     ),

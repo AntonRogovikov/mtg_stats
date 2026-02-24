@@ -17,7 +17,7 @@ class ApiConfig {
   //static const String defaultBaseUrl = 'http://localhost:8080';
   static const String defaultBaseUrl = 'https://antonrogovikov.duckdns.org';
   static String _baseUrl = defaultBaseUrl;
-  static String _apiToken = 'a376721b-0174-4189-b3b3-0bc85efa880d';
+  static String _apiToken = '';
   static String _jwtToken = '';
   static String _currentUserId = '';
   static String _currentUserName = '';
