@@ -4,11 +4,11 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/core/ui_feedback.dart';
-import 'package:mtg_stats/pages/home_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/services/health_service.dart';
+import 'package:mtg_stats/widgets/common/section_card.dart';
 
 /// Настройки: URL бэкенда, вход, экспорт/импорт.
 class SettingsPage extends ConsumerStatefulWidget {
@@ -30,7 +30,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _importing = false;
   bool _clearingGames = false;
   bool _checkingHealth = false;
-  bool _loadingTimezone = false;
   bool _savingTimezone = false;
   int? _timezoneOffsetMinutes;
   HealthResult? _healthResult;
@@ -43,7 +42,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _loginNameController = TextEditingController();
     _loginPasswordController = TextEditingController();
     if (ApiConfig.isAdmin) {
-      _loadTimezoneSettings();
+      _primeTimezoneFromProvider();
     }
   }
 
@@ -86,7 +85,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (mounted) {
         setState(() => _loggingIn = false);
         if (result.isAdmin) {
-          _loadTimezoneSettings();
+          _primeTimezoneFromProvider();
         }
         _loginPasswordController.clear();
         _showSnack(
@@ -99,10 +98,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomePage()),
-          (route) => false,
-        );
+        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
       }
     } catch (e) {
       if (mounted) {
@@ -144,24 +140,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  Future<void> _loadTimezoneSettings() async {
+  Future<void> _primeTimezoneFromProvider() async {
     if (!ApiConfig.isAdmin) return;
-    setState(() => _loadingTimezone = true);
     try {
-      final settings = await ref.read(appSettingsServiceProvider).getSettings();
+      final settings = await ref.read(appSettingsProvider.future);
       if (!mounted) return;
       setState(() {
         _timezoneController.text = settings.timezone;
         _timezoneOffsetMinutes = settings.timezoneOffsetMinutes;
       });
-      ref.invalidate(appSettingsProvider);
     } catch (_) {
       // Не блокируем страницу настроек, если загрузка timezone временно недоступна.
-    } finally {
-      if (mounted) {
-        setState(() => _loadingTimezone = false);
-      }
     }
+  }
+
+  Future<void> _refreshTimezoneSettings() async {
+    ref.invalidate(appSettingsProvider);
+    await _primeTimezoneFromProvider();
   }
 
   Future<void> _saveTimezoneSettings() async {
@@ -214,10 +209,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           backgroundColor: Colors.grey,
         ),
       );
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomePage()),
-        (route) => false,
-      );
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     }
   }
 
@@ -560,6 +552,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final timezoneAsync = ref.watch(appSettingsProvider);
+    final isTimezoneLoading = ApiConfig.isAdmin && timezoneAsync.isLoading;
+    final timezoneOffset = timezoneAsync.asData?.value.timezoneOffsetMinutes;
+    if (ApiConfig.isAdmin && !isTimezoneLoading && timezoneOffset != null) {
+      if (_timezoneOffsetMinutes != timezoneOffset) {
+        _timezoneOffsetMinutes = timezoneOffset;
+      }
+      final tz = timezoneAsync.asData?.value.timezone;
+      if (tz != null && _timezoneController.text.isEmpty) {
+        _timezoneController.text = tz;
+      }
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text('Настройки', style: AppTheme.appBarTitle),
@@ -603,35 +607,31 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 onSubmitted: (_) => _save(),
               ),
               const SizedBox(height: 12),
-              Card(
+              SectionCard(
                 color: Colors.blueGrey[50],
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.blueGrey[700]),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Как подключиться к локальному серверу',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.blueGrey[800],
-                            ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.blueGrey[700]),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Как подключиться к локальному серверу',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blueGrey[800],
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'При сборке можно задать URL через dart-define:\n'
-                        'flutter run --dart-define=BASE_URL=http://localhost:8080',
-                        style: TextStyle(
-                            fontSize: 13, color: Colors.blueGrey[800]),
-                      ),
-                    ],
-                  ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'При сборке можно задать URL через dart-define:\n'
+                      'flutter run --dart-define=BASE_URL=http://localhost:8080',
+                      style: TextStyle(fontSize: 13, color: Colors.blueGrey[800]),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 12),
@@ -732,7 +732,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 controller: _timezoneController,
                 decoration: InputDecoration(
                   hintText: 'Например: Europe/Moscow',
-                  suffixIcon: _loadingTimezone
+                  suffixIcon: isTimezoneLoading
                       ? const SizedBox(
                           width: 18,
                           height: 18,
@@ -776,7 +776,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ),
                   const SizedBox(width: 12),
                   TextButton(
-                    onPressed: _loadingTimezone ? null : _loadTimezoneSettings,
+                    onPressed: isTimezoneLoading ? null : _refreshTimezoneSettings,
                     child: const Text('Обновить'),
                   ),
                 ],
@@ -839,118 +839,115 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ],
               ),
               const SizedBox(height: 24),
-              Card(
-                elevation: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Импорт / экспорт и очистка данных',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+              SectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Импорт / экспорт и очистка данных',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Операции ниже могут затрагивать все данные приложения. '
-                        'Перед импортом рекомендуется сделать экспорт.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey[700],
-                        ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Операции ниже могут затрагивать все данные приложения. '
+                      'Перед импортом рекомендуется сделать экспорт.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[700],
                       ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              (_saving || _exporting) ? null : _exportAll,
-                          icon: _exporting
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: (_saving || _exporting) ? null : _exportAll,
+                        icon: _exporting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
                                   ),
-                                )
-                              : const Icon(Icons.file_download),
-                          label: Text(
-                            _exporting
-                                ? 'Экспортируется...'
-                                : 'Экспортировать все данные',
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.indigo[700],
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
+                                ),
+                              )
+                            : const Icon(Icons.file_download),
+                        label: Text(
+                          _exporting
+                              ? 'Экспортируется...'
+                              : 'Экспортировать все данные',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.indigo[700],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              (_saving || _importing) ? null : _importAll,
-                          icon: _importing
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: (_saving || _importing) ? null : _importAll,
+                        icon: _importing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
                                   ),
-                                )
-                              : const Icon(Icons.file_upload),
-                          label: Text(
-                            _importing
-                                ? 'Импортируется...'
-                                : 'Импортировать все данные',
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange[700],
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
+                                ),
+                              )
+                            : const Icon(Icons.file_upload),
+                        label: Text(
+                          _importing
+                              ? 'Импортируется...'
+                              : 'Импортировать все данные',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange[700],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              (_saving || _clearingGames) ? null : _clearGames,
-                          icon: _clearingGames
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed:
+                            (_saving || _clearingGames) ? null : _clearGames,
+                        icon: _clearingGames
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
                                   ),
-                                )
-                              : const Icon(Icons.delete_forever),
-                          label: Text(
-                            _clearingGames
-                                ? 'Очищается...'
-                                : 'Очистить игры и ходы',
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red[700],
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
+                                ),
+                              )
+                            : const Icon(Icons.delete_forever),
+                        label: Text(
+                          _clearingGames
+                              ? 'Очищается...'
+                              : 'Очистить игры и ходы',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red[700],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ],

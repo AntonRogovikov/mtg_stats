@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/models/stats.dart';
 import 'package:mtg_stats/providers/stats_providers.dart';
+import 'package:mtg_stats/widgets/common/async_state_views.dart';
 import 'package:mtg_stats/widgets/stats/stats.dart';
 
 enum StatsViewMode { list, histogram, pie, podium }
@@ -73,26 +74,10 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         ],
       ),
       body: statsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  error.toString(),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.red),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => ref.invalidate(statsDataProvider),
-                  child: const Text('Повторить'),
-                ),
-              ],
-            ),
-          ),
+        loading: () => const AsyncLoadingView(),
+        error: (error, _) => AsyncErrorView(
+          message: error.toString(),
+          onRetry: () => ref.invalidate(statsDataProvider),
         ),
         data: (statsData) => DefaultTabController(
           length: 2,

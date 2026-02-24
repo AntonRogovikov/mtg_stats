@@ -8,7 +8,7 @@ import 'package:mtg_stats/pages/deck_card_page.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/services/deck_service.dart';
-import 'package:mtg_stats/services/game_service.dart';
+import 'package:mtg_stats/widgets/common/async_state_views.dart';
 
 /// Страница истории партий: список завершённых игр.
 class GamesHistoryPage extends ConsumerStatefulWidget {
@@ -19,16 +19,11 @@ class GamesHistoryPage extends ConsumerStatefulWidget {
 }
 
 class _GamesHistoryPageState extends ConsumerState<GamesHistoryPage> {
-  final GameService _gameService = GameService();
   final TextEditingController _searchController = TextEditingController();
-  List<Game> _games = [];
-  bool _loading = true;
-  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadGames();
     _searchController.addListener(() => setState(() {}));
   }
 
@@ -38,10 +33,13 @@ class _GamesHistoryPageState extends ConsumerState<GamesHistoryPage> {
     super.dispose();
   }
 
-  List<Game> _filteredGames(int timezoneOffsetMinutes) {
+  List<Game> _filteredGames(
+    List<Game> games,
+    int timezoneOffsetMinutes,
+  ) {
     final query = _searchController.text.trim().toLowerCase();
-    if (query.isEmpty) return _games;
-    return _games.where((g) {
+    if (query.isEmpty) return games;
+    return games.where((g) {
       final team1 = (g.team1Name ?? 'Команда 1').toLowerCase();
       final team2 = (g.team2Name ?? 'Команда 2').toLowerCase();
       final dateStr = _formatDate(
@@ -59,34 +57,9 @@ class _GamesHistoryPageState extends ConsumerState<GamesHistoryPage> {
     }).toList();
   }
 
-  Future<void> _loadGames() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final list = await _gameService.getGames();
-      list.sort((a, b) {
-        final idA = int.tryParse(a.id) ?? 0;
-        final idB = int.tryParse(b.id) ?? 0;
-        if (idA != idB) return idB.compareTo(idA);
-        return b.startTime.compareTo(a.startTime);
-      });
-      if (mounted) {
-        setState(() {
-          _games = list;
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _games = [];
-          _loading = false;
-          _error = e.toString();
-        });
-      }
-    }
+  Future<void> _refreshGames() async {
+    ref.invalidate(gamesHistoryProvider);
+    await ref.read(gamesHistoryProvider.future);
   }
 
   static const _weekdayNames = [
@@ -228,8 +201,8 @@ class _GamesHistoryPageState extends ConsumerState<GamesHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final timezoneOffsetMinutes =
-        ref.watch(appSettingsProvider).asData?.value.timezoneOffsetMinutes ?? 0;
+    final gamesAsync = ref.watch(gamesHistoryProvider);
+    final timezoneOffsetMinutes = ref.watch(currentTimezoneOffsetProvider);
     return Scaffold(
       appBar: AppBar(
         title: Text('История партий', style: AppTheme.appBarTitle),
@@ -238,7 +211,7 @@ class _GamesHistoryPageState extends ConsumerState<GamesHistoryPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _loadGames,
+            onPressed: gamesAsync.isLoading ? null : _refreshGames,
           ),
         ],
       ),
@@ -267,19 +240,21 @@ class _GamesHistoryPageState extends ConsumerState<GamesHistoryPage> {
               ),
             ),
           ),
-          if (!_loading && _games.isNotEmpty) _buildGamesHeader(),
+          if (gamesAsync.asData?.value.isNotEmpty == true)
+            _buildGamesHeader(gamesAsync.asData!.value, timezoneOffsetMinutes),
           Expanded(
-            child: _buildBody(timezoneOffsetMinutes: timezoneOffsetMinutes),
+            child: _buildBody(
+              gamesAsync: gamesAsync,
+              timezoneOffsetMinutes: timezoneOffsetMinutes,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildGamesHeader() {
-    final timezoneOffsetMinutes =
-        ref.watch(appSettingsProvider).asData?.value.timezoneOffsetMinutes ?? 0;
-    final filteredCount = _filteredGames(timezoneOffsetMinutes).length;
+  Widget _buildGamesHeader(List<Game> games, int timezoneOffsetMinutes) {
+    final filteredCount = _filteredGames(games, timezoneOffsetMinutes).length;
     final isSearching = _searchController.text.trim().isNotEmpty;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -292,7 +267,7 @@ class _GamesHistoryPageState extends ConsumerState<GamesHistoryPage> {
           Text(
             isSearching
                 ? 'Найдено: $filteredCount'
-                : 'Всего партий: ${_games.length}',
+                : 'Всего партий: ${games.length}',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -304,73 +279,36 @@ class _GamesHistoryPageState extends ConsumerState<GamesHistoryPage> {
     );
   }
 
-  Widget _buildBody({required int timezoneOffsetMinutes}) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+  Widget _buildBody({
+    required AsyncValue<List<Game>> gamesAsync,
+    required int timezoneOffsetMinutes,
+  }) {
+    if (gamesAsync.isLoading) {
+      return const AsyncLoadingView();
     }
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
-              const SizedBox(height: 16),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[800]),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _loadGames,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Повторить'),
-              ),
-            ],
-          ),
-        ),
+    if (gamesAsync.hasError) {
+      return AsyncErrorView(
+        message: gamesAsync.error.toString(),
+        onRetry: _refreshGames,
       );
     }
-    if (_games.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.history, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'Нет сыгранных партий',
-              style: TextStyle(fontSize: 18, color: Colors.grey[700]),
-            ),
-          ],
-        ),
+    final games = gamesAsync.asData?.value ?? const <Game>[];
+    if (games.isEmpty) {
+      return const EmptyStateView(
+        icon: Icons.history,
+        title: 'Нет сыгранных партий',
       );
     }
-    final filtered = _filteredGames(timezoneOffsetMinutes);
+    final filtered = _filteredGames(games, timezoneOffsetMinutes);
     if (filtered.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'Ничего не найдено',
-              style: TextStyle(fontSize: 18, color: Colors.grey[700]),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Попробуйте изменить запрос',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-            ),
-          ],
-        ),
+      return const EmptyStateView(
+        icon: Icons.search_off,
+        title: 'Ничего не найдено',
+        subtitle: 'Попробуйте изменить запрос',
       );
     }
     return RefreshIndicator(
-      onRefresh: _loadGames,
+      onRefresh: _refreshGames,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: filtered.length,

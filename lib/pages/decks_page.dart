@@ -12,6 +12,7 @@ import 'package:mtg_stats/pages/full_screen_image_page.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/providers/stats_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
+import 'package:mtg_stats/widgets/common/async_state_views.dart';
 import 'package:mtg_stats/widgets/deck_card.dart';
 
 /// Список колод: CRUD, кубики для выбора, открытие карточки колоды.
@@ -27,6 +28,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
   int? _selectedDeckIndex;
   String _providerDecksSignature = '';
   Map<int, int> _gamesByDeckId = {};
+  Map<int, double> _deckChancePercentById = {};
 
   int _firstDiceValue = 1;
   int _secondDiceValue = 1;
@@ -56,6 +58,12 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
   void initState() {
     super.initState();
     _initializeSecureRandom();
+    ref.listenManual(decksProvider, (_, next) {
+      next.whenData(_syncDecksFromProvider);
+    });
+    ref.listenManual(statsDataProvider, (_, next) {
+      next.whenData(_syncDeckStatsFromProvider);
+    });
   }
 
   @override
@@ -87,6 +95,34 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
         _showErrorSnack('Ошибка при загрузке списка колод');
       }
     }
+  }
+
+  void _syncDecksFromProvider(List<Deck> providerDecks) {
+    final signature = _buildDecksSignature(providerDecks);
+    if (signature == _providerDecksSignature) return;
+    setState(() {
+      decks = List<Deck>.from(providerDecks);
+      _providerDecksSignature = signature;
+      if (_selectedDeckIndex != null && _selectedDeckIndex! >= decks.length) {
+        _selectedDeckIndex = null;
+      }
+      _recomputeDeckChanceMap();
+    });
+  }
+
+  void _syncDeckStatsFromProvider(StatsData statsData) {
+    final nextGamesByDeckId = <int, int>{
+      for (final stat in statsData.deckStats) stat.deckId: stat.gamesCount,
+    };
+    final hasGamesMapChanged = nextGamesByDeckId.length != _gamesByDeckId.length ||
+        nextGamesByDeckId.entries.any(
+          (entry) => _gamesByDeckId[entry.key] != entry.value,
+        );
+    if (!hasGamesMapChanged) return;
+    setState(() {
+      _gamesByDeckId = nextGamesByDeckId;
+      _recomputeDeckChanceMap();
+    });
   }
 
   Future<void> _createDeck(String name) async {
@@ -284,10 +320,19 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
     return decks.fold<double>(0, (sum, deck) => sum + _deckWeight(deck));
   }
 
-  double _deckChancePercent(Deck deck) {
+  void _recomputeDeckChanceMap() {
     final total = _totalDeckWeight();
-    if (total <= 0) return 0;
-    return (_deckWeight(deck) / total) * 100;
+    if (total <= 0) {
+      _deckChancePercentById = {for (final d in decks) d.id: 0};
+      return;
+    }
+    _deckChancePercentById = {
+      for (final d in decks) d.id: (_deckWeight(d) / total) * 100,
+    };
+  }
+
+  double _deckChancePercent(Deck deck) {
+    return _deckChancePercentById[deck.id] ?? 0;
   }
 
   String _deckProbabilityBadge(Deck deck) {
@@ -459,42 +504,18 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
             )
           : null,
       body: decksAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                const SizedBox(height: 12),
-                Text(
-                  'Не удалось загрузить колоды\n$error',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: _refreshDecks,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Повторить'),
-                ),
-              ],
-            ),
-          ),
+        loading: () => const AsyncLoadingView(),
+        error: (error, _) => AsyncErrorView(
+          message: 'Не удалось загрузить колоды\n$error',
+          onRetry: _refreshDecks,
         ),
         data: (providerDecks) {
-          statsAsync.whenData((statsData) {
-            _gamesByDeckId = {
-              for (final stat in statsData.deckStats) stat.deckId: stat.gamesCount,
-            };
-          });
-          final signature = _buildDecksSignature(providerDecks);
-          if (signature != _providerDecksSignature) {
-            decks = List<Deck>.from(providerDecks);
-            _providerDecksSignature = signature;
-            if (_selectedDeckIndex != null && _selectedDeckIndex! >= decks.length) {
-              _selectedDeckIndex = null;
-            }
+          if (_providerDecksSignature.isEmpty) {
+            _syncDecksFromProvider(providerDecks);
+          }
+          final statsData = statsAsync.asData?.value;
+          if (statsData != null && _gamesByDeckId.isEmpty) {
+            _syncDeckStatsFromProvider(statsData);
           }
 
           return Column(
@@ -504,22 +525,18 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
               _buildSearchField(),
               if (decks.isEmpty)
                 Expanded(
-                  child: Center(
-                    child: Text(
-                      ApiConfig.isAdmin
-                          ? 'Нет колод. Нажмите + чтобы добавить'
-                          : 'Нет колод',
-                      style: const TextStyle(fontSize: 18, color: Colors.grey),
-                    ),
+                  child: EmptyStateView(
+                    icon: Icons.import_contacts,
+                    title: ApiConfig.isAdmin
+                        ? 'Нет колод. Нажмите + чтобы добавить'
+                        : 'Нет колод',
                   ),
                 )
               else if (_filteredDecks.isEmpty)
                 const Expanded(
-                  child: Center(
-                    child: Text(
-                      'Ничего не найдено',
-                      style: TextStyle(fontSize: 18, color: Colors.grey),
-                    ),
+                  child: EmptyStateView(
+                    icon: Icons.search_off,
+                    title: 'Ничего не найдено',
                   ),
                 )
               else

@@ -202,8 +202,6 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
   Future<void> _togglePauseWithFeedback(ScaffoldMessengerState messenger) async {
     try {
       await ref.read(activeGameControllerProvider.notifier).togglePause();
-      if (!mounted) return;
-      setState(() {});
     } catch (e) {
       if (!mounted) return;
       _showErrorSnackBar(messenger, e);
@@ -213,8 +211,6 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
   Future<void> _toggleTurnWithFeedback(ScaffoldMessengerState messenger) async {
     try {
       await ref.read(activeGameControllerProvider.notifier).toggleTurn();
-      if (!mounted) return;
-      setState(() {});
     } catch (e) {
       if (!mounted) return;
       _showErrorSnackBar(messenger, e);

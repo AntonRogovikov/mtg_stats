@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/core/constants.dart';
+import 'package:mtg_stats/core/ui_feedback.dart';
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/pages/full_screen_image_page.dart';
 import 'package:mtg_stats/services/deck_image/deck_image_provider.dart';
@@ -51,12 +52,7 @@ class _DeckCardPageState extends State<DeckCardPage> {
   Future<void> _save() async {
     final newName = _nameController.text.trim();
     if (newName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Введите название колоды'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      UiFeedback.showWarning(context, 'Введите название колоды');
       return;
     }
     final deckToSave = _deck.copyWith(name: newName);
@@ -76,23 +72,13 @@ class _DeckCardPageState extends State<DeckCardPage> {
           avatarUrl: updated.avatarUrl ?? _deck.avatarUrl,
         );
         setState(() => _deck = merged);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Колода сохранена'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        UiFeedback.showSuccess(context, 'Колода сохранена');
         Navigator.of(context).pop(merged);
       }
     } catch (_) {
       if (mounted) {
         setState(() => _isSaving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ошибка при сохранении'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        UiFeedback.showError(context, 'Ошибка при сохранении');
       }
     }
   }
@@ -118,22 +104,12 @@ class _DeckCardPageState extends State<DeckCardPage> {
           _deck = updated;
           _isUploading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Изображение загружено'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        UiFeedback.showSuccess(context, 'Изображение загружено');
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isUploading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        UiFeedback.showError(context, 'Ошибка: $e');
       }
     }
   }
@@ -149,22 +125,12 @@ class _DeckCardPageState extends State<DeckCardPage> {
           _deck = updated;
           _isDeleting = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Изображение удалено'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        UiFeedback.showSuccess(context, 'Изображение удалено');
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isDeleting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        UiFeedback.showError(context, 'Ошибка: $e');
       }
     }
   }

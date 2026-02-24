@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/core/ui_feedback.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/services/user_service.dart';
 
@@ -28,40 +29,20 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     final newPass = _newPasswordController.text;
     final confirm = _confirmPasswordController.text;
     if (newPass.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Введите новый пароль'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      UiFeedback.showWarning(context, 'Введите новый пароль');
       return;
     }
     if (newPass != confirm) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Пароли не совпадают'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      UiFeedback.showWarning(context, 'Пароли не совпадают');
       return;
     }
     if (newPass.length < 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Пароль должен быть не менее 4 символов'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      UiFeedback.showWarning(context, 'Пароль должен быть не менее 4 символов');
       return;
     }
     final userId = ApiConfig.currentUserId;
     if (userId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ошибка: ID пользователя не найден'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      UiFeedback.showError(context, 'Ошибка: ID пользователя не найден');
       return;
     }
     setState(() => _changingPassword = true);
@@ -75,23 +56,13 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         _newPasswordController.clear();
         _confirmPasswordController.clear();
         setState(() => _changingPassword = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Пароль успешно изменён'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        UiFeedback.showSuccess(context, 'Пароль успешно изменён');
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
         setState(() => _changingPassword = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        UiFeedback.showError(context, 'Ошибка: $e');
       }
     }
   }

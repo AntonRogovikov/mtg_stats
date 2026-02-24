@@ -123,9 +123,10 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
   }
 
   void _startAutoSelection() {
+    final shuffledPlayers = List<User>.from(_allPlayers)..shuffle(_random);
     setState(() {
       _userDecks.clear();
-      _playerOrder = List.from(_allPlayers)..shuffle(_random);
+      _playerOrder = shuffledPlayers;
       _currentPlayerIndex = 0;
       _autoSelectionStarted = true;
     });

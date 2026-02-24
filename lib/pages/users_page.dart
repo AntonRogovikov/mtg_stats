@@ -5,6 +5,7 @@ import 'package:mtg_stats/core/ui_feedback.dart';
 import 'package:mtg_stats/models/user.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
+import 'package:mtg_stats/widgets/common/async_state_views.dart';
 
 /// Управление пользователями (только для администраторов).
 class UsersPage extends ConsumerStatefulWidget {
@@ -300,25 +301,7 @@ class _UsersErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
-            const SizedBox(height: 16),
-            Text(error, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Повторить'),
-            ),
-          ],
-        ),
-      ),
-    );
+    return AsyncErrorView(message: error, onRetry: onRetry);
   }
 }
 
@@ -327,23 +310,10 @@ class _UsersEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            'Нет пользователей',
-            style: TextStyle(fontSize: 18, color: Colors.grey[700]),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Нажмите + чтобы добавить',
-            style: TextStyle(color: Colors.grey[600]),
-          ),
-        ],
-      ),
+    return const EmptyStateView(
+      icon: Icons.people_outline,
+      title: 'Нет пользователей',
+      subtitle: 'Нажмите + чтобы добавить',
     );
   }
 }
