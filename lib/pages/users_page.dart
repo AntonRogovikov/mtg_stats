@@ -15,16 +15,6 @@ class UsersPage extends ConsumerStatefulWidget {
 }
 
 class _UsersPageState extends ConsumerState<UsersPage> {
-  List<User> _users = [];
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUsers();
-  }
-
   void _showSnack(String message, Color color) {
     if (!mounted) return;
     UiFeedback.showMessage(
@@ -34,28 +24,9 @@ class _UsersPageState extends ConsumerState<UsersPage> {
     );
   }
 
-  Future<void> _loadUsers() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final list = await ref.read(userServiceProvider).getUsers();
-      if (mounted) {
-        setState(() {
-          _users = list;
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _users = [];
-          _loading = false;
-          _error = e.toString();
-        });
-      }
-    }
+  Future<void> _refreshUsers() async {
+    ref.invalidate(usersProvider);
+    await ref.read(usersProvider.future);
   }
 
   Future<void> _showCreateDialog() async {
@@ -133,7 +104,7 @@ class _UsersPageState extends ConsumerState<UsersPage> {
       );
       if (mounted) {
         _showSnack('Пользователь создан', Colors.green);
-        _loadUsers();
+        ref.invalidate(usersProvider);
       }
     } catch (e) {
       _showSnack('Ошибка: $e', Colors.red);
@@ -216,7 +187,7 @@ class _UsersPageState extends ConsumerState<UsersPage> {
       );
       if (mounted) {
         _showSnack('Пользователь обновлён', Colors.green);
-        _loadUsers();
+        ref.invalidate(usersProvider);
       }
     } catch (e) {
       _showSnack('Ошибка: $e', Colors.red);
@@ -250,7 +221,7 @@ class _UsersPageState extends ConsumerState<UsersPage> {
       await ref.read(userServiceProvider).deleteUser(user.id);
       if (mounted) {
         _showSnack('Пользователь удалён', Colors.green);
-        _loadUsers();
+        ref.invalidate(usersProvider);
       }
     } catch (e) {
       _showSnack('Ошибка: $e', Colors.red);
@@ -259,6 +230,7 @@ class _UsersPageState extends ConsumerState<UsersPage> {
 
   @override
   Widget build(BuildContext context) {
+    final usersAsync = ref.watch(usersProvider);
     if (!ApiConfig.isLoggedIn || !ApiConfig.isAdmin) {
       return Scaffold(
         appBar: AppBar(
@@ -283,11 +255,11 @@ class _UsersPageState extends ConsumerState<UsersPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _loadUsers,
+            onPressed: usersAsync.isLoading ? null : _refreshUsers,
           ),
         ],
       ),
-      body: _buildBody(),
+      body: _buildBody(usersAsync),
       floatingActionButton: FloatingActionButton(
         onPressed: _showCreateDialog,
         child: const Icon(Icons.add),
@@ -295,24 +267,24 @@ class _UsersPageState extends ConsumerState<UsersPage> {
     );
   }
 
-  Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return _UsersErrorState(
-        error: _error!,
-        onRetry: _loadUsers,
-      );
-    }
-    if (_users.isEmpty) {
-      return const _UsersEmptyState();
-    }
-    return _UsersList(
-      users: _users,
-      onRefresh: _loadUsers,
-      onEdit: _showEditDialog,
-      onDelete: _confirmDelete,
+  Widget _buildBody(AsyncValue<List<User>> usersAsync) {
+    return usersAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => _UsersErrorState(
+        error: error.toString(),
+        onRetry: _refreshUsers,
+      ),
+      data: (users) {
+        if (users.isEmpty) {
+          return const _UsersEmptyState();
+        }
+        return _UsersList(
+          users: users,
+          onRefresh: _refreshUsers,
+          onEdit: _showEditDialog,
+          onDelete: _confirmDelete,
+        );
+      },
     );
   }
 }

@@ -8,6 +8,7 @@ class DeckCard extends StatelessWidget {
   final Deck deck;
   final bool isSelected;
   final bool isDisabled;
+  final String? probabilityBadge;
   /// Если задано и [isDisabled], на карточке показывается подпись «Колода выбрана игроком …».
   final String? disabledSelectedByPlayerName;
   final VoidCallback onTap;
@@ -19,6 +20,7 @@ class DeckCard extends StatelessWidget {
     required this.deck,
     required this.isSelected,
     this.isDisabled = false,
+    this.probabilityBadge,
     this.disabledSelectedByPlayerName,
     required this.onTap,
     required this.onLongPress,
@@ -119,6 +121,30 @@ class DeckCard extends StatelessWidget {
                                         color: Colors.white,
                                         size: 20,
                                       ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            if ((probabilityBadge?.isNotEmpty ?? false) &&
+                                !isDisabled)
+                              Positioned(
+                                right: 8,
+                                bottom: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black54,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    probabilityBadge!,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ),

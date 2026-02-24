@@ -1,17 +1,20 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/models/deck.dart';
+import 'package:mtg_stats/models/stats.dart';
 import 'package:mtg_stats/models/user.dart';
 import 'package:mtg_stats/pages/deck_card_page.dart';
 import 'package:mtg_stats/pages/deck_picker_page.dart';
+import 'package:mtg_stats/providers/stats_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/services/deck_service.dart';
 
 /// Экран выбора колод для игроков с двумя режимами: ручной и автовыбор.
 /// В обоих режимах: бросить кубик, ввести вручную или выбрать из списка.
-class DeckSelectionPage extends StatefulWidget {
+class DeckSelectionPage extends ConsumerStatefulWidget {
   final List<User> team1;
   final List<User> team2;
   final List<Deck> allDecks;
@@ -26,10 +29,10 @@ class DeckSelectionPage extends StatefulWidget {
   });
 
   @override
-  State<DeckSelectionPage> createState() => _DeckSelectionPageState();
+  ConsumerState<DeckSelectionPage> createState() => _DeckSelectionPageState();
 }
 
-class _DeckSelectionPageState extends State<DeckSelectionPage> {
+class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
   late List<User> _playerOrder;
   late List<Deck> _deckOrder;
   late Map<String, Deck> _userDecks;
@@ -95,6 +98,10 @@ class _DeckSelectionPageState extends State<DeckSelectionPage> {
     _playerOrder = List.from(_allPlayers);
     _deckOrder = List.from(widget.allDecks);
     _initializeSecureRandom();
+    ref.read(statsDataProvider.future).catchError((_) => const StatsData(
+          playerStats: [],
+          deckStats: [],
+        ));
   }
 
   @override
@@ -142,23 +149,51 @@ class _DeckSelectionPageState extends State<DeckSelectionPage> {
     });
   }
 
-  void _selectDeckBySum(User user, int sum) {
-    if (_deckOrder.isEmpty) return;
+  int _gamesCountForDeck(Deck deck) {
+    final statsData = ref.read(statsDataProvider).asData?.value;
+    if (statsData == null) return 0;
+    for (final DeckStats deckStats in statsData.deckStats) {
+      if (deckStats.deckId == deck.id) return deckStats.gamesCount;
+    }
+    return 0;
+  }
 
-    final startIndex = (sum - 1) % _deckOrder.length;
+  double _deckWeightFromHistory(Deck deck) {
+    const minWeight = 0.15;
+    final gamesCount = _gamesCountForDeck(deck);
+    final weight = 1 / (1 + gamesCount);
+    return weight < minWeight ? minWeight : weight;
+  }
+
+  Deck? _pickDeckByHistoryWeight(List<Deck> availableDecks) {
+    if (availableDecks.isEmpty) return null;
+    final totalWeight = availableDecks.fold<double>(
+      0,
+      (sum, deck) => sum + _deckWeightFromHistory(deck),
+    );
+    if (totalWeight <= 0) {
+      return availableDecks[_fastRandom.nextInt(availableDecks.length)];
+    }
+    final rnd = _secureRandom ?? _fastRandom;
+    var threshold = rnd.nextDouble() * totalWeight;
+    for (final deck in availableDecks) {
+      threshold -= _deckWeightFromHistory(deck);
+      if (threshold <= 0) return deck;
+    }
+    return availableDecks.last;
+  }
+
+  void _selectDeckByHistoryWeight(User user) {
+    if (_deckOrder.isEmpty) return;
     final takenDeckIds = _userDecks.entries
         .where((e) => e.key != user.id)
         .map((e) => e.value.id)
         .toSet();
 
-    Deck? deckToAssign;
-    for (int i = 0; i < _deckOrder.length; i++) {
-      final idx = (startIndex + i) % _deckOrder.length;
-      if (!takenDeckIds.contains(_deckOrder[idx].id)) {
-        deckToAssign = _deckOrder[idx];
-        break;
-      }
-    }
+    final availableDecks = _deckOrder
+        .where((deck) => !takenDeckIds.contains(deck.id))
+        .toList(growable: false);
+    final deckToAssign = _pickDeckByHistoryWeight(availableDecks);
 
     if (deckToAssign == null) {
       _showWarning('Все колоды уже выбраны. Освободите колоду или добавьте новую.');
@@ -166,7 +201,7 @@ class _DeckSelectionPageState extends State<DeckSelectionPage> {
     }
 
     setState(() {
-      _userDecks[user.id] = deckToAssign!;
+      _userDecks[user.id] = deckToAssign;
       if (_isAutoMode) {
         if (_currentPlayerIndex >= _playerOrder.length - 1) {
           _autoSelectionStarted = false;
@@ -216,7 +251,7 @@ class _DeckSelectionPageState extends State<DeckSelectionPage> {
             _secondDiceValue = _secureRandom!.nextInt(20) + 1;
             _isRolling = false;
           });
-          _selectDeckBySum(user, _firstDiceValue + _secondDiceValue);
+          _selectDeckByHistoryWeight(user);
         });
       } else {
         setState(() {
@@ -224,7 +259,7 @@ class _DeckSelectionPageState extends State<DeckSelectionPage> {
           _secondDiceValue = _fastRandom.nextInt(20) + 1;
           _isRolling = false;
         });
-        _selectDeckBySum(user, _firstDiceValue + _secondDiceValue);
+        _selectDeckByHistoryWeight(user);
       }
     });
   }
@@ -326,7 +361,7 @@ class _DeckSelectionPageState extends State<DeckSelectionPage> {
         _firstDiceValue = sum - 20;
       }
     });
-    _selectDeckBySum(user, sum);
+    _selectDeckByHistoryWeight(user);
   }
 
   void _openDeckPicker(User user) {

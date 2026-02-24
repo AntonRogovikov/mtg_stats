@@ -10,6 +10,7 @@ import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/pages/deck_card_page.dart';
 import 'package:mtg_stats/pages/full_screen_image_page.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
+import 'package:mtg_stats/providers/stats_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/widgets/deck_card.dart';
 
@@ -23,8 +24,9 @@ class DeckListPage extends ConsumerStatefulWidget {
 
 class _DeckListPageState extends ConsumerState<DeckListPage> {
   List<Deck> decks = [];
-  bool _isLoading = true;
   int? _selectedDeckIndex;
+  String _providerDecksSignature = '';
+  Map<int, int> _gamesByDeckId = {};
 
   int _firstDiceValue = 1;
   int _secondDiceValue = 1;
@@ -54,7 +56,6 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
   void initState() {
     super.initState();
     _initializeSecureRandom();
-    _getAllDecks();
   }
 
   @override
@@ -70,30 +71,29 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
     UiFeedback.showError(context, message);
   }
 
-  Future<void> _getAllDecks() async {
+  String _buildDecksSignature(List<Deck> source) {
+    return source
+        .map((d) => '${d.id}|${d.name}|${d.imageUrl ?? ''}|${d.avatarUrl ?? ''}')
+        .join(';');
+  }
+
+  Future<void> _refreshDecks() async {
+    ref.invalidate(decksProvider);
+    ref.invalidate(statsDataProvider);
     try {
-      final loadedDecks = await ref.read(deckServiceProvider).getAllDecks();
-      setState(() {
-        decks = loadedDecks;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        decks = [];
-        _isLoading = false;
-      });
-      _showErrorSnack('Ошибка при загрузке списка колод');
+      await ref.read(decksProvider.future);
+    } catch (_) {
+      if (mounted) {
+        _showErrorSnack('Ошибка при загрузке списка колод');
+      }
     }
   }
 
   Future<void> _createDeck(String name) async {
     try {
-      final newDeck = await ref.read(deckServiceProvider).createDeck(name);
-      if (mounted) {
-        setState(() {
-          decks.add(newDeck);
-        });
-      }
+      await ref.read(deckServiceProvider).createDeck(name);
+      ref.invalidate(decksProvider);
+      ref.invalidate(statsDataProvider);
     } catch (e) {
       _showErrorSnack('Ошибка при добавлении колоды');
     }
@@ -102,11 +102,8 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
   Future<void> _deleteDeck(int id) async {
     try {
       await ref.read(deckServiceProvider).deleteDeck(id);
-      if (mounted) {
-        setState(() {
-          decks.removeWhere((deck) => deck.id == id);
-        });
-      }
+      ref.invalidate(decksProvider);
+      ref.invalidate(statsDataProvider);
     } catch (e) {
       _showErrorSnack('Ошибка при удалении колоды');
     }
@@ -261,7 +258,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
           setState(() {
             _secondDiceValue = _secureRandom!.nextInt(20) + 1;
             _isRolling = false;
-            _calculateSelectedDeck();
+            _selectDeckByWeight();
           });
         });
       } else {
@@ -269,24 +266,57 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
           _firstDiceValue = _fastRandom.nextInt(20) + 1;
           _secondDiceValue = _fastRandom.nextInt(20) + 1;
           _isRolling = false;
-          _calculateSelectedDeck();
+          _selectDeckByWeight();
         });
       }
     });
   }
 
-  void _calculateSelectedDeck() {
-    final sum = _firstDiceValue + _secondDiceValue;
-    _selectDeckBySum(sum);
+  double _deckWeight(Deck deck) {
+    const minWeight = 0.15;
+    final gamesCount = _gamesByDeckId[deck.id] ?? 0;
+    final weight = 1 / (1 + gamesCount);
+    return weight < minWeight ? minWeight : weight;
   }
 
-  void _selectDeckBySum(int sum) {
-    if (decks.isNotEmpty) {
-      int index = (sum - 1) % decks.length;
-      setState(() {
-        _selectedDeckIndex = index;
-      });
+  double _totalDeckWeight() {
+    if (decks.isEmpty) return 0;
+    return decks.fold<double>(0, (sum, deck) => sum + _deckWeight(deck));
+  }
+
+  double _deckChancePercent(Deck deck) {
+    final total = _totalDeckWeight();
+    if (total <= 0) return 0;
+    return (_deckWeight(deck) / total) * 100;
+  }
+
+  String _deckProbabilityBadge(Deck deck) {
+    final chance = _deckChancePercent(deck);
+    final gamesCount = _gamesByDeckId[deck.id] ?? 0;
+    return '${chance.toStringAsFixed(1)}% · игр $gamesCount';
+  }
+
+  int? _pickDeckIndexByWeight() {
+    if (decks.isEmpty) return null;
+    final totalWeight = decks.fold<double>(
+      0,
+      (sum, deck) => sum + _deckWeight(deck),
+    );
+    if (totalWeight <= 0) return _fastRandom.nextInt(decks.length);
+
+    final rnd = _secureRandom ?? _fastRandom;
+    var threshold = rnd.nextDouble() * totalWeight;
+    for (var i = 0; i < decks.length; i++) {
+      threshold -= _deckWeight(decks[i]);
+      if (threshold <= 0) return i;
     }
+    return decks.length - 1;
+  }
+
+  void _selectDeckByWeight() {
+    final index = _pickDeckIndexByWeight();
+    if (index == null) return;
+    _selectedDeckIndex = index;
   }
 
   void _manualSumInput() {
@@ -385,7 +415,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
               _firstDiceValue = sum - 20;
             }
             _selectedDeckIndex = null;
-            _selectDeckBySum(sum);
+            _selectDeckByWeight();
           });
         }
       } catch (_) {}
@@ -394,6 +424,8 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
 
   @override
   Widget build(BuildContext context) {
+    final decksAsync = ref.watch(decksProvider);
+    final statsAsync = ref.watch(statsDataProvider);
     return Scaffold(
       appBar: AppBar(
         title: Text('Колоды', style: AppTheme.appBarTitle),
@@ -404,10 +436,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
           IconButton(
             icon: Icon(Icons.refresh, color: AppTheme.appBarForeground),
             tooltip: 'Обновить список колод',
-            onPressed: _isLoading ? null : () async {
-              setState(() => _isLoading = true);
-              await _getAllDecks();
-            },
+            onPressed: decksAsync.isLoading ? null : _refreshDecks,
           ),
           IconButton(
             icon: Icon(
@@ -429,40 +458,77 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
               child: Icon(Icons.add, color: Colors.white),
             )
           : null,
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
+      body: decksAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (_isDiceSectionVisible) _buildDiceSection(),
-                _buildDecksHeader(),
-                _buildSearchField(),
-                if (decks.isEmpty)
-                  Expanded(
-                    child: Center(
-                      child: Text(
-                        ApiConfig.isAdmin
-                    ? 'Нет колод. Нажмите + чтобы добавить'
-                    : 'Нет колод',
-                        style:
-                            const TextStyle(fontSize: 18, color: Colors.grey),
-                      ),
-                    ),
-                  )
-                else if (_filteredDecks.isEmpty)
-                  Expanded(
-                    child: Center(
-                      child: Text(
-                        'Ничего не найдено',
-                        style:
-                            const TextStyle(fontSize: 18, color: Colors.grey),
-                      ),
-                    ),
-                  )
-                else
-                  _buildDecksGrid(),
-                if (_isDiceSectionVisible) _buildSelectionInfo(),
+                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const SizedBox(height: 12),
+                Text(
+                  'Не удалось загрузить колоды\n$error',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: _refreshDecks,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Повторить'),
+                ),
               ],
             ),
+          ),
+        ),
+        data: (providerDecks) {
+          statsAsync.whenData((statsData) {
+            _gamesByDeckId = {
+              for (final stat in statsData.deckStats) stat.deckId: stat.gamesCount,
+            };
+          });
+          final signature = _buildDecksSignature(providerDecks);
+          if (signature != _providerDecksSignature) {
+            decks = List<Deck>.from(providerDecks);
+            _providerDecksSignature = signature;
+            if (_selectedDeckIndex != null && _selectedDeckIndex! >= decks.length) {
+              _selectedDeckIndex = null;
+            }
+          }
+
+          return Column(
+            children: [
+              if (_isDiceSectionVisible) _buildDiceSection(),
+              _buildDecksHeader(),
+              _buildSearchField(),
+              if (decks.isEmpty)
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      ApiConfig.isAdmin
+                          ? 'Нет колод. Нажмите + чтобы добавить'
+                          : 'Нет колод',
+                      style: const TextStyle(fontSize: 18, color: Colors.grey),
+                    ),
+                  ),
+                )
+              else if (_filteredDecks.isEmpty)
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      'Ничего не найдено',
+                      style: TextStyle(fontSize: 18, color: Colors.grey),
+                    ),
+                  ),
+                )
+              else
+                _buildDecksGrid(),
+              if (_isDiceSectionVisible) _buildSelectionInfo(),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -693,7 +759,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
   Widget _buildDecksGrid() {
     return Expanded(
       child: RefreshIndicator(
-        onRefresh: _getAllDecks,
+        onRefresh: _refreshDecks,
         child: Listener(
           onPointerDown: (PointerDownEvent e) {
           if (e.kind == PointerDeviceKind.mouse && e.buttons == 1) {
@@ -745,6 +811,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
                 key: ValueKey<int>(deck.id),
                 deck: deck,
                 isSelected: isSelected,
+                probabilityBadge: _deckProbabilityBadge(deck),
                 onTap: () {
                   setState(() {
                     _selectedDeckIndex = decks.indexWhere((d) => d.id == deck.id);
@@ -801,7 +868,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
                         setState(() => decks[index] = updated);
                       }
                       // Перезагрузка с сервера, чтобы подтянуть обновлённое изображение и остальные поля
-                      await _getAllDecks();
+                      await _refreshDecks();
                     }
                   });
                 },
@@ -833,6 +900,9 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
     }
 
     final deckName = decks[_selectedDeckIndex!].name;
+    final deck = decks[_selectedDeckIndex!];
+    final gamesCount = _gamesByDeckId[deck.id] ?? 0;
+    final chance = _deckChancePercent(deck);
 
     return Container(
       padding: EdgeInsets.all(16),
@@ -861,6 +931,15 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Colors.green[900],
+                ),
+              ),
+              SizedBox(width: 12),
+              Text(
+                'шанс ${chance.toStringAsFixed(1)}% · игр в истории $gamesCount',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.green[800],
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
