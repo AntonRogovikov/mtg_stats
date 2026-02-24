@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
+import 'package:mtg_stats/providers/stats_providers.dart';
 import 'package:mtg_stats/services/game_manager.dart';
 
 class ActiveGameState {
@@ -94,6 +95,7 @@ class ActiveGameController extends Notifier<ActiveGameState> {
     required int winningTeam,
     bool isTechnicalDefeat = false,
   }) async {
+    var finishedOnServer = false;
     final game = GameManager.instance.activeGame;
     if (game != null) {
       try {
@@ -102,7 +104,14 @@ class ActiveGameController extends Notifier<ActiveGameState> {
               winningTeam,
               isTechnicalDefeat: isTechnicalDefeat,
             );
+        finishedOnServer = true;
       } catch (_) {}
+    }
+
+    if (finishedOnServer) {
+      // Обновляем источники данных, от которых зависят вероятности колод и история.
+      ref.invalidate(statsDataProvider);
+      ref.invalidate(gamesHistoryProvider);
     }
 
     GameManager.instance.finishGame(winningTeam: winningTeam);
