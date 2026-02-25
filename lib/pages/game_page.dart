@@ -9,8 +9,8 @@ import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/models/user.dart';
 import 'package:mtg_stats/pages/active_game_page.dart';
 import 'package:mtg_stats/pages/deck_selection_page.dart';
+import 'package:mtg_stats/providers/active_game_provider.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
-import 'package:mtg_stats/services/game_manager.dart';
 import 'package:mtg_stats/services/api_config.dart';
 
 /// Настройка новой партии: команды, первый ход, колоды игроков.
@@ -47,7 +47,8 @@ class _GamePageState extends ConsumerState<GamePage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      if (GameManager.instance.hasActiveGame) {
+      final activeState = ref.read(activeGameControllerProvider);
+      if (activeState.hasActiveGame) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => const ActiveGamePage(),
@@ -56,17 +57,9 @@ class _GamePageState extends ConsumerState<GamePage> {
         return;
       }
       try {
-        final active = await ref.read(gameServiceProvider).getActiveGame();
-        if (mounted && active != null) {
-          GameManager.instance.setActiveGameFromApi(active);
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => const ActiveGamePage(),
-            ),
-          );
-          return;
-        }
-        if (mounted && GameManager.instance.hasActiveGame) {
+        await ref.read(activeGameControllerProvider.notifier).syncActiveGameFromServer();
+        final synced = ref.read(activeGameControllerProvider);
+        if (mounted && synced.hasActiveGame) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (_) => const ActiveGamePage(),
@@ -111,7 +104,7 @@ class _GamePageState extends ConsumerState<GamePage> {
   }
 
   Future<void> _startGame(List<User> users) async {
-    if (GameManager.instance.hasActiveGame) {
+    if (ref.read(activeGameControllerProvider).hasActiveGame) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => const ActiveGamePage(),
@@ -195,8 +188,9 @@ class _GamePageState extends ConsumerState<GamePage> {
       final gameService = ref.read(gameServiceProvider);
       final created = await gameService.createGame(stubGame);
       if (!mounted) return;
-      GameManager.instance.setActiveGameFromApi(created);
-      GameManager.instance.setTeamNames(
+      final activeNotifier = ref.read(activeGameControllerProvider.notifier);
+      activeNotifier.setActiveGameFromApi(created);
+      activeNotifier.setTeamNames(
         team1Name: team1Name,
         team2Name: team2Name,
       );
@@ -204,7 +198,7 @@ class _GamePageState extends ConsumerState<GamePage> {
       try {
         final withTurn = await gameService.startTurn();
         if (mounted && withTurn != null) {
-          GameManager.instance.setActiveGameFromApi(withTurn);
+          activeNotifier.setActiveGameFromApi(withTurn);
         }
       } catch (_) {}
       if (!mounted) return;

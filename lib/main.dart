@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/pages/deck_matchups_page.dart';
 import 'package:mtg_stats/pages/decks_page.dart';
 import 'package:mtg_stats/pages/game_page.dart';
 import 'package:mtg_stats/pages/games_history_page.dart';
 import 'package:mtg_stats/pages/home_page.dart';
 import 'package:mtg_stats/pages/change_password_page.dart';
+import 'package:mtg_stats/pages/meta_dashboard_page.dart';
+import 'package:mtg_stats/pages/public_game_page.dart';
 import 'package:mtg_stats/pages/settings_page.dart';
 import 'package:mtg_stats/pages/stats_page.dart';
 import 'package:mtg_stats/pages/users_page.dart';
@@ -52,9 +55,21 @@ class MyApp extends StatelessWidget {
         '/games': (context) => const GamePage(),
         '/games/history': (context) => const GamesHistoryPage(),
         '/stats': (context) => const StatsPage(),
+        '/stats/matchups': (context) => const DeckMatchupsPage(),
+        '/stats/meta': (context) => const MetaDashboardPage(),
         '/settings': (context) => const SettingsPage(),
         '/settings/change-password': (context) => const ChangePasswordPage(),
         '/users': (context) => const UsersPage(),
+      },
+      onGenerateRoute: (settings) {
+        final name = settings.name ?? '';
+        if (name.startsWith('/public/game/')) {
+          final token = name.replaceFirst('/public/game/', '');
+          return MaterialPageRoute(
+            builder: (_) => PublicGamePage(token: token),
+          );
+        }
+        return null;
       },
     );
   }

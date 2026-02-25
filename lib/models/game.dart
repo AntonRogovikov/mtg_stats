@@ -75,6 +75,7 @@ class GamePlayer {
 
 class Game {
   final String id;
+  final String? publicViewToken;
   final DateTime startTime;
   DateTime? endTime;
   final int turnLimitSeconds;
@@ -95,6 +96,7 @@ class Game {
 
   Game({
     required this.id,
+    this.publicViewToken,
     required this.startTime,
     required this.turnLimitSeconds,
     this.teamTimeLimitSeconds = 0,
@@ -134,6 +136,7 @@ class Game {
     final id = idRaw is int ? idRaw.toString() : (idRaw as String? ?? '');
     return Game(
       id: id,
+      publicViewToken: json['public_view_token'] as String?,
       startTime: DateTime.parse(json['start_time'] as String),
       endTime: json['end_time'] != null
           ? DateTime.parse(json['end_time'] as String)
@@ -168,6 +171,7 @@ class Game {
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        'public_view_token': publicViewToken,
         'start_time': startTime.toIso8601String(),
         'end_time': endTime?.toIso8601String(),
         'turn_limit_seconds': turnLimitSeconds,
@@ -187,5 +191,13 @@ class Game {
         'team1_name': team1Name,
         'team2_name': team2Name,
       };
+}
+
+enum RematchMode {
+  classicRematch('classic_rematch'),
+  swapTeamDecksRandomPerPlayer('swap_team_decks_random_per_player');
+
+  const RematchMode(this.apiValue);
+  final String apiValue;
 }
 

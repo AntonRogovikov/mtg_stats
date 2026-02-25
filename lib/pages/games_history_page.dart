@@ -5,9 +5,12 @@ import 'package:mtg_stats/core/format_utils.dart';
 import 'package:mtg_stats/core/timezone_utils.dart';
 import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/pages/deck_card_page.dart';
+import 'package:mtg_stats/pages/active_game_page.dart';
+import 'package:mtg_stats/providers/active_game_provider.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/services/deck_service.dart';
+import 'package:mtg_stats/services/game_service.dart';
 import 'package:mtg_stats/widgets/common/async_state_views.dart';
 
 /// Страница истории партий: список завершённых игр.
@@ -404,6 +407,31 @@ class GameDetailPage extends StatelessWidget {
         '${localDt.year} ($weekday)';
   }
 
+  Future<void> _createRematch(BuildContext context, RematchMode mode) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final container = ProviderScope.containerOf(context, listen: false);
+    try {
+      final gameService = GameService();
+      final rematch = await gameService.createRematch(
+        sourceGameId: game.id,
+        mode: mode,
+      );
+      container.read(activeGameControllerProvider.notifier).setActiveGameFromApi(rematch);
+      if (!context.mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ActiveGamePage()),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Не удалось создать реванш: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final team1 =
@@ -427,6 +455,24 @@ class GameDetailPage extends StatelessWidget {
         title: Text('Партия #${game.id}', style: AppTheme.appBarTitle),
         backgroundColor: AppTheme.appBarBackground,
         foregroundColor: AppTheme.appBarForeground,
+        actions: [
+          if (ApiConfig.isAdmin && game.endTime != null)
+            PopupMenuButton<RematchMode>(
+              icon: const Icon(Icons.replay),
+              tooltip: 'Быстрый реванш',
+              onSelected: (mode) => _createRematch(context, mode),
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: RematchMode.classicRematch,
+                  child: Text('Обычный реванш'),
+                ),
+                PopupMenuItem(
+                  value: RematchMode.swapTeamDecksRandomPerPlayer,
+                  child: Text('Обмен колод команд (рандом игрокам)'),
+                ),
+              ],
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

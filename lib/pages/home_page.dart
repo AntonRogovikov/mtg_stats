@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/pages/active_game_page.dart';
+import 'package:mtg_stats/providers/active_game_provider.dart';
 import 'package:mtg_stats/services/api_config.dart';
-import 'package:mtg_stats/services/game_manager.dart';
 import 'package:mtg_stats/widgets/home_button.dart';
 
 /// Главная страница приложения: навигация к партиям, статистике и колодам.
-class HomePage extends StatelessWidget {
+class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasActiveGame = ref.watch(
+      activeGameControllerProvider.select((state) => state.hasActiveGame),
+    );
     return Scaffold(
       appBar: AppBar(
         title: Text('MTG Статистика', style: AppTheme.appBarTitle),
@@ -33,7 +37,7 @@ class HomePage extends StatelessWidget {
                 text: 'ПАРТИИ',
                 icon: Icons.sports_esports,
                 onPressed: () {
-                  if (GameManager.instance.hasActiveGame) {
+                  if (hasActiveGame) {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => const ActiveGamePage(),

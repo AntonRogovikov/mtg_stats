@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:math' show pi;
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/core/constants.dart';
 import 'package:mtg_stats/core/format_utils.dart';
@@ -14,7 +16,6 @@ import 'package:mtg_stats/providers/active_game_provider.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/widgets/active_game/team_composition.dart';
 import 'package:mtg_stats/widgets/active_game/zone_expanded_deck_image.dart';
-import 'package:mtg_stats/services/game_manager.dart';
 
 /// Активная партия: таймеры, ходы, завершение.
 class ActiveGamePage extends ConsumerStatefulWidget {
@@ -45,6 +46,49 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
   /// Панель лимитов: false — справа, true — слева.
   bool _panelOnLeft = false;
 
+  Future<void> _showShareLinkDialog(String token) async {
+    if (!mounted) return;
+    final rootContext = context;
+    final path = '/public/game/$token';
+    final fullLink = kIsWeb ? '${Uri.base.origin}$path' : path;
+    await showDialog<void>(
+      context: rootContext,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Публичная ссылка'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Скопируйте ссылку и отправьте её зрителям:'),
+              const SizedBox(height: 10),
+              SelectableText(fullLink),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Закрыть'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: fullLink));
+                Navigator.of(dialogContext).pop();
+                ScaffoldMessenger.of(rootContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Ссылка скопирована в буфер обмена'),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.copy),
+              label: const Text('Копировать'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -54,45 +98,47 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
       if (_isTickRunning) return;
       _isTickRunning = true;
       try {
-      if (!mounted) return;
-      final game = GameManager.instance.activeGame;
-      if (game == null) return;
-      if (GameManager.instance.isPaused) return;
-      final teamLimit = GameManager.instance.teamTimeLimitSeconds;
-      if (teamLimit > 0) {
-        final t1 = _teamTotalTurnDuration(game, 1);
-        final t2 = _teamTotalTurnDuration(game, 2);
-        if (t1.inSeconds >= teamLimit) {
-          await _finishGameTechnicalDefeat(context, 2);
-          return;
+        if (!mounted) return;
+        final activeState = ref.read(activeGameControllerProvider);
+        final game = activeState.activeGame;
+        if (game == null) return;
+        if (activeState.isPaused) return;
+        final teamLimit = activeState.teamTimeLimitSeconds;
+        if (teamLimit > 0) {
+          final t1 = _teamTotalTurnDuration(game, 1, activeState);
+          final t2 = _teamTotalTurnDuration(game, 2, activeState);
+          if (t1.inSeconds >= teamLimit) {
+            await _finishGameTechnicalDefeat(context, 2);
+            return;
+          }
+          if (t2.inSeconds >= teamLimit) {
+            await _finishGameTechnicalDefeat(context, 1);
+            return;
+          }
         }
-        if (t2.inSeconds >= teamLimit) {
-          await _finishGameTechnicalDefeat(context, 1);
-          return;
+        final hasTurnLimit = activeState.turnLimitSeconds > 0;
+        final turnElapsed = activeState.currentTurnElapsed;
+        final limit = Duration(seconds: activeState.turnLimitSeconds);
+        final overtime =
+            hasTurnLimit && turnElapsed > limit ? turnElapsed - limit : Duration.zero;
+        final displayTurn = hasTurnLimit
+            ? (overtime > Duration.zero ? overtime : limit - turnElapsed)
+            : turnElapsed;
+        final totalSeconds = game.totalDuration.inSeconds;
+        final displayTurnSeconds = displayTurn.inSeconds;
+        final team1Seconds = _teamTotalTurnDuration(game, 1, activeState).inSeconds;
+        final team2Seconds = _teamTotalTurnDuration(game, 2, activeState).inSeconds;
+        if (totalSeconds != _lastTotalSeconds ||
+            displayTurnSeconds != _lastDisplayTurnSeconds ||
+            team1Seconds != _lastTeam1Seconds ||
+            team2Seconds != _lastTeam2Seconds) {
+          _lastTotalSeconds = totalSeconds;
+          _lastDisplayTurnSeconds = displayTurnSeconds;
+          _lastTeam1Seconds = team1Seconds;
+          _lastTeam2Seconds = team2Seconds;
+          setState(() {});
         }
-      }
-      final hasTurnLimit = GameManager.instance.turnLimitSeconds > 0;
-      final turnElapsed = GameManager.instance.currentTurnElapsed;
-      final limit = Duration(seconds: GameManager.instance.turnLimitSeconds);
-      final overtime = hasTurnLimit && turnElapsed > limit ? turnElapsed - limit : Duration.zero;
-      final displayTurn = hasTurnLimit
-          ? (overtime > Duration.zero ? overtime : limit - turnElapsed)
-          : turnElapsed;
-      final totalSeconds = game.totalDuration.inSeconds;
-      final displayTurnSeconds = displayTurn.inSeconds;
-      final team1Seconds = _teamTotalTurnDuration(game, 1).inSeconds;
-      final team2Seconds = _teamTotalTurnDuration(game, 2).inSeconds;
-      if (totalSeconds != _lastTotalSeconds ||
-          displayTurnSeconds != _lastDisplayTurnSeconds ||
-          team1Seconds != _lastTeam1Seconds ||
-          team2Seconds != _lastTeam2Seconds) {
-        _lastTotalSeconds = totalSeconds;
-        _lastDisplayTurnSeconds = displayTurnSeconds;
-        _lastTeam1Seconds = team1Seconds;
-        _lastTeam2Seconds = team2Seconds;
-        setState(() {});
-      }
-      _syncTurnMusic();
+        _syncTurnMusic();
       } finally {
         _isTickRunning = false;
       }
@@ -108,13 +154,14 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
 
   Future<void> _syncTurnMusic() async {
     if (!mounted) return;
-    final hasTurnLimit = GameManager.instance.turnLimitSeconds > 0;
-    final isTurnRunning = GameManager.instance.isTurnRunning;
-    final turnElapsed = GameManager.instance.currentTurnElapsed;
-    final limit = Duration(seconds: GameManager.instance.turnLimitSeconds);
+    final activeState = ref.read(activeGameControllerProvider);
+    final hasTurnLimit = activeState.turnLimitSeconds > 0;
+    final isTurnRunning = activeState.isTurnRunning;
+    final turnElapsed = activeState.currentTurnElapsed;
+    final limit = Duration(seconds: activeState.turnLimitSeconds);
     final overtime = hasTurnLimit && turnElapsed > limit ? turnElapsed - limit : Duration.zero;
 
-    if (!hasTurnLimit || !_soundEnabled || !isTurnRunning || GameManager.instance.isPaused) {
+    if (!hasTurnLimit || !_soundEnabled || !isTurnRunning || activeState.isPaused) {
       if (_playingTrack != null) {
         await _turnAudioPlayer.stop();
         if (mounted) {
@@ -219,6 +266,7 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
 
   @override
   Widget build(BuildContext context) {
+    final activeState = ref.watch(activeGameControllerProvider);
     final decksById = ref.watch(
       activeGameControllerProvider.select((state) => state.decksById),
     );
@@ -260,19 +308,41 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
       );
     }
 
-    final game = GameManager.instance.activeGame;
+    final game = activeState.activeGame;
 
     if (game == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) Navigator.of(context).pop();
-      });
-      return const Scaffold();
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('Активная партия', style: AppTheme.appBarTitle),
+          backgroundColor: AppTheme.appBarBackground,
+          foregroundColor: AppTheme.appBarForeground,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Активная партия не найдена.\nВозможно, игра уже завершена.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: const Text('Назад'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
 
     final totalDuration = game.totalDuration;
     final hasTurnLimit = game.turnLimitSeconds > 0;
-    final turnElapsed = GameManager.instance.currentTurnElapsed;
-    final limit = Duration(seconds: GameManager.instance.turnLimitSeconds);
+    final turnElapsed = activeState.currentTurnElapsed;
+    final limit = Duration(seconds: activeState.turnLimitSeconds);
     final overtime =
         hasTurnLimit && turnElapsed > limit ? turnElapsed - limit : Duration.zero;
     final isOvertime = overtime > Duration.zero;
@@ -282,14 +352,14 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
     final displayTurn = hasTurnLimit
         ? (isOvertime ? overtime : limit - turnElapsed)
         : turnElapsed;
-    final currentTurnTeamPlayers = _teamPlayers(game, GameManager.instance.currentTurnTeam);
+    final currentTurnTeamPlayers = _teamPlayers(game, activeState.currentTurnTeam);
 
-    final currentTeamName = GameManager.instance.currentTurnTeam == 1
-        ? GameManager.instance.team1Name
-        : GameManager.instance.team2Name;
+    final currentTeamName = activeState.currentTurnTeam == 1
+        ? activeState.team1Name
+        : activeState.team2Name;
     final teamTotalTimeByNumber = <int, Duration>{
-      1: _teamTotalTurnDuration(game, 1),
-      2: _teamTotalTurnDuration(game, 2),
+      1: _teamTotalTurnDuration(game, 1, activeState),
+      2: _teamTotalTurnDuration(game, 2, activeState),
     };
 
     final screenSize = MediaQuery.sizeOf(context);
@@ -308,6 +378,12 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
               backgroundColor: AppTheme.appBarBackground,
               automaticallyImplyLeading: true,
               actions: [
+                if (game.publicViewToken?.isNotEmpty == true)
+                  IconButton(
+                    icon: const Icon(Icons.share),
+                    tooltip: 'Публичная ссылка',
+                    onPressed: () => _showShareLinkDialog(game.publicViewToken!),
+                  ),
                 Tooltip(
                   message: _useFaceToFaceView ? 'Классический вид' : 'Вид лицом к лицу',
                   child: IconButton(
@@ -327,6 +403,7 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
               game,
               decksById,
               teamTotalTimeByNumber,
+              activeState,
             )
           : SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
@@ -335,7 +412,7 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
             children: [
             _TotalTimeCard(
               totalDuration: totalDuration,
-              isPaused: GameManager.instance.isPaused,
+              isPaused: activeState.isPaused,
               onTogglePause: () => _togglePauseWithFeedback(
                 ScaffoldMessenger.of(context),
               ),
@@ -344,7 +421,7 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
               const SizedBox(height: 16),
               _TurnControlCard(
                 currentTeamName: currentTeamName,
-                currentTurnTeam: GameManager.instance.currentTurnTeam,
+                currentTurnTeam: activeState.currentTurnTeam,
                 currentTurnTeamPlayers: currentTurnTeamPlayers,
                 soundEnabled: _soundEnabled,
                 onToggleSound: () {
@@ -356,8 +433,8 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
                 limit: limit,
                 overtimeMusicPending: _overtimeMusicPending,
                 onPlayOvertimeMusicFromGesture: _playOvertimeMusicFromGesture,
-                isPaused: GameManager.instance.isPaused,
-                isTurnRunning: GameManager.instance.isTurnRunning,
+                isPaused: activeState.isPaused,
+                isTurnRunning: activeState.isTurnRunning,
                 onToggleTurn: () => _toggleTurnWithFeedback(
                   ScaffoldMessenger.of(context),
                 ),
@@ -372,17 +449,19 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
                 game,
                 1,
                 teamTotalTimeByNumber[1]!,
+                activeState,
               ),
               team2Section: _buildTeamSection(
                 context,
                 game,
                 2,
                 teamTotalTimeByNumber[2]!,
+                activeState,
               ),
             ),
             const SizedBox(height: 24),
             _FinishGameActionButton(
-              onLongPress: () => _finishGame(context),
+              onLongPress: () => _finishGame(context, activeState),
               onTapHint: () => _showFinishHint(context, compactText: false),
             ),
           ],
@@ -392,19 +471,23 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
   }
 
   Future<void> _finishGameTechnicalDefeat(BuildContext context, int winningTeam) async {
-    if (GameManager.instance.activeGame == null) return;
+    if (ref.read(activeGameControllerProvider).activeGame == null) return;
     final navigator = Navigator.of(context);
     await ref.read(activeGameControllerProvider.notifier).finishGame(
           winningTeam: winningTeam,
           isTechnicalDefeat: true,
         );
     if (mounted) {
-      navigator.pop();
+      navigator.maybePop();
     }
   }
 
   /// Общее время хода команды (включая текущий ход, если он у неё).
-  Duration _teamTotalTurnDuration(Game game, int teamNumber) {
+  Duration _teamTotalTurnDuration(
+    Game game,
+    int teamNumber,
+    ActiveGameState activeState,
+  ) {
     final turns = game.turns;
     var total = Duration.zero;
     for (final t in turns) {
@@ -412,9 +495,8 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
         total += t.duration;
       }
     }
-    if (GameManager.instance.isTurnRunning &&
-        GameManager.instance.currentTurnTeam == teamNumber) {
-      total += GameManager.instance.currentTurnElapsed;
+    if (activeState.isTurnRunning && activeState.currentTurnTeam == teamNumber) {
+      total += activeState.currentTurnElapsed;
     }
     return total;
   }
@@ -424,14 +506,15 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
     Game game,
     Map<int, Deck> decksById,
     Map<int, Duration> teamTotalTimeByNumber,
+    ActiveGameState activeState,
   ) {
     const baseTeam1Color = Colors.blue;
     const baseTeam2Color = Colors.green;
-    final team1Name = GameManager.instance.team1Name;
-    final team2Name = GameManager.instance.team2Name;
+    final team1Name = activeState.team1Name;
+    final team2Name = activeState.team2Name;
     final team1TotalTime = teamTotalTimeByNumber[1] ?? Duration.zero;
     final team2TotalTime = teamTotalTimeByNumber[2] ?? Duration.zero;
-    final teamLimit = GameManager.instance.teamTimeLimitSeconds;
+    final teamLimit = activeState.teamTimeLimitSeconds;
     const warningThreshold = Duration(seconds: 30); // для теста; было 5 мин
     final isTeam1TimeWarning = teamLimit > 0 &&
         (Duration(seconds: teamLimit) - team1TotalTime) <= warningThreshold &&
@@ -442,8 +525,8 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
     final team1Color = isTeam1TimeWarning ? Colors.red : baseTeam1Color;
     final team2Color = isTeam2TimeWarning ? Colors.red : baseTeam2Color;
     final totalDuration = game.totalDuration;
-    final currentTeam = GameManager.instance.currentTurnTeam;
-    final isTurnRunning = GameManager.instance.isTurnRunning;
+    final currentTeam = activeState.currentTurnTeam;
+    final isTurnRunning = activeState.isTurnRunning;
     final isTeam1Active = currentTeam == 1;
     final isTeam2Active = currentTeam == 2;
 
@@ -455,6 +538,7 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
       team1Color: team1Color,
       team2Color: team2Color,
       panelOnLeft: _panelOnLeft,
+      activeState: activeState,
     );
     return Row(
       children: [
@@ -473,7 +557,7 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
                     color: team1Color,
                     isActive: isTeam1Active,
                     isTurnRunning: isTurnRunning,
-                    isPaused: GameManager.instance.isPaused,
+                    isPaused: activeState.isPaused,
                     nameAtTop: true,
                     showComposition: true,
                     useDeckAvatars: true,
@@ -494,6 +578,7 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
                     onToggleTurn: () => _toggleTurnWithFeedback(
                       ScaffoldMessenger.of(context),
                     ),
+                    currentTurnElapsed: activeState.currentTurnElapsed,
                   ),
                 ),
               ),
@@ -506,7 +591,7 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
                   color: team2Color,
                   isActive: isTeam2Active,
                   isTurnRunning: isTurnRunning,
-                  isPaused: GameManager.instance.isPaused,
+                  isPaused: activeState.isPaused,
                   nameAtTop: true,
                   showComposition: true,
                   useDeckAvatars: true,
@@ -527,6 +612,7 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
                   onToggleTurn: () => _toggleTurnWithFeedback(
                     ScaffoldMessenger.of(context),
                   ),
+                  currentTurnElapsed: activeState.currentTurnElapsed,
                 ),
               ),
             ],
@@ -545,6 +631,7 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
     required MaterialColor team1Color,
     required MaterialColor team2Color,
     required bool panelOnLeft,
+    required ActiveGameState activeState,
   }) {
     return _FaceToFaceSidePanel(
       team1TotalTime: team1TotalTime,
@@ -554,7 +641,7 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
       team2Color: team2Color,
       panelOnLeft: panelOnLeft,
       soundEnabled: _soundEnabled,
-      isPaused: GameManager.instance.isPaused,
+      isPaused: activeState.isPaused,
       onTogglePanelSide: () {
         setState(() => _panelOnLeft = !_panelOnLeft);
       },
@@ -568,15 +655,15 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
       onTogglePause: () async {
         await _togglePauseWithFeedback(ScaffoldMessenger.of(context));
       },
-      onFinishLongPress: () => _finishGame(context),
+      onFinishLongPress: () => _finishGame(context, activeState),
       onFinishTapHint: () => _showFinishHint(context, compactText: true),
     );
   }
 
-  Future<void> _finishGame(BuildContext context) async {
+  Future<void> _finishGame(BuildContext context, ActiveGameState activeState) async {
     final navigator = Navigator.of(context);
-    final team1Name = GameManager.instance.team1Name;
-    final team2Name = GameManager.instance.team2Name;
+    final team1Name = activeState.team1Name;
+    final team2Name = activeState.team2Name;
 
     final result = await showDialog<int>(
       context: context,
@@ -591,7 +678,7 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
             winningTeam: result,
           );
       if (mounted) {
-        navigator.pop();
+        navigator.maybePop();
       }
     }
   }
@@ -611,15 +698,16 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
     Game game,
     int teamNumber,
     Duration teamTotalTime,
+    ActiveGameState activeState,
   ) {
     final half = game.players.length ~/ 2;
     final teamPlayers = game.players.asMap().entries.where(
           (e) => (teamNumber == 1 && e.key < half) || (teamNumber == 2 && e.key >= half),
         ).map((e) => e.value).toList();
     final teamName = teamNumber == 1
-        ? GameManager.instance.team1Name
-        : GameManager.instance.team2Name;
-    final teamLimit = GameManager.instance.teamTimeLimitSeconds;
+        ? activeState.team1Name
+        : activeState.team2Name;
+    final teamLimit = activeState.teamTimeLimitSeconds;
     final isTimeWarning = teamLimit > 0 &&
         (Duration(seconds: teamLimit) - teamTotalTime) <= const Duration(seconds: 30) && // для теста; было 5 мин
         teamTotalTime < Duration(seconds: teamLimit);
@@ -1226,6 +1314,7 @@ class _FaceToFaceZone extends StatelessWidget {
     required this.onDeckTap,
     required this.onCloseExpandedDeck,
     required this.onToggleTurn,
+    required this.currentTurnElapsed,
   });
 
   final Game game;
@@ -1243,6 +1332,7 @@ class _FaceToFaceZone extends StatelessWidget {
   final ValueChanged<Deck> onDeckTap;
   final VoidCallback onCloseExpandedDeck;
   final VoidCallback onToggleTurn;
+  final Duration currentTurnElapsed;
 
   @override
   Widget build(BuildContext context) {
@@ -1284,7 +1374,7 @@ class _FaceToFaceZone extends StatelessWidget {
     );
 
     final hasTurnLimit = game.turnLimitSeconds > 0;
-    final turnElapsed = GameManager.instance.currentTurnElapsed;
+    final turnElapsed = currentTurnElapsed;
     final limit = Duration(seconds: game.turnLimitSeconds);
     final overtime =
         hasTurnLimit && turnElapsed > limit ? turnElapsed - limit : Duration.zero;

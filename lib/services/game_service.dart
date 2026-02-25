@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -146,5 +147,74 @@ class GameService {
     }
     return Game.fromJson(
         json.decode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<Game> createRematch({
+    required String sourceGameId,
+    required RematchMode mode,
+  }) async {
+    final response = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/games/rematch'),
+      body: json.encode({
+        'source_game_id': int.tryParse(sourceGameId) ?? 0,
+        'mode': mode.apiValue,
+      }),
+      headers: {...ApiConfig.authHeaders, 'Content-Type': 'application/json'},
+    );
+    if (response.statusCode != 201) {
+      throw Exception(ApiError.parse(response.body, 'Не удалось создать реванш'));
+    }
+    return Game.fromJson(json.decode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<Game> getPublicGameByToken(String token) async {
+    final response = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/public/games/$token'),
+    );
+    if (response.statusCode == 404) {
+      throw Exception('Публичная игра не найдена');
+    }
+    if (response.statusCode != 200) {
+      throw Exception('Не удалось загрузить публичную игру: ${response.statusCode}');
+    }
+    return Game.fromJson(json.decode(response.body) as Map<String, dynamic>);
+  }
+
+  Stream<Game> streamPublicGameByToken(
+    String token, {
+    Duration interval = const Duration(seconds: 1),
+  }) {
+    late final StreamController<Game> controller;
+    Timer? timer;
+    var inFlight = false;
+
+    Future<void> tick() async {
+      if (inFlight || controller.isClosed) return;
+      inFlight = true;
+      try {
+        final game = await getPublicGameByToken(token);
+        if (!controller.isClosed) {
+          controller.add(game);
+        }
+      } catch (e, st) {
+        if (!controller.isClosed) {
+          controller.addError(e, st);
+        }
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    controller = StreamController<Game>(
+      onListen: () {
+        tick();
+        timer = Timer.periodic(interval, (_) => tick());
+      },
+      onCancel: () {
+        timer?.cancel();
+      },
+    );
+
+    return controller.stream;
   }
 }

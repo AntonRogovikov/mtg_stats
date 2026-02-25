@@ -29,6 +29,16 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         backgroundColor: AppTheme.appBarBackground,
         foregroundColor: AppTheme.appBarForeground,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.grid_view),
+            tooltip: 'Матрица матчапов',
+            onPressed: () => Navigator.pushNamed(context, '/stats/matchups'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.insights),
+            tooltip: 'Мета-срез',
+            onPressed: () => Navigator.pushNamed(context, '/stats/meta'),
+          ),
           PopupMenuButton<StatsViewMode>(
             icon: Icon(
               _iconForViewMode(_viewMode),

@@ -16,6 +16,30 @@ class StatsData {
   });
 }
 
+class MetaDashboardQuery {
+  final String groupBy;
+  final DateTime? from;
+  final DateTime? to;
+
+  const MetaDashboardQuery({
+    this.groupBy = 'week',
+    this.from,
+    this.to,
+  });
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is MetaDashboardQuery &&
+        other.groupBy == groupBy &&
+        other.from == from &&
+        other.to == to;
+  }
+
+  @override
+  int get hashCode => Object.hash(groupBy, from, to);
+}
+
 final statsDataProvider = FutureProvider<StatsData>((ref) async {
   final statsService = ref.watch(statsServiceProvider);
   final results = await Future.wait([
@@ -40,5 +64,26 @@ final statsDataProvider = FutureProvider<StatsData>((ref) async {
   return StatsData(
     playerStats: playerStats,
     deckStats: deckStats,
+  );
+});
+
+final deckMatchupsProvider = FutureProvider<List<DeckMatchupStats>>((ref) async {
+  final statsService = ref.watch(statsServiceProvider);
+  final matchups = await statsService.getDeckMatchups();
+  matchups.sort((a, b) {
+    final byDeck1 = a.deck1Name.compareTo(b.deck1Name);
+    if (byDeck1 != 0) return byDeck1;
+    return a.deck2Name.compareTo(b.deck2Name);
+  });
+  return matchups;
+});
+
+final metaDashboardProvider =
+    FutureProvider.family<MetaDashboardData, MetaDashboardQuery>((ref, query) async {
+  final statsService = ref.watch(statsServiceProvider);
+  return statsService.getMetaDashboard(
+    groupBy: query.groupBy,
+    from: query.from,
+    to: query.to,
   );
 });
