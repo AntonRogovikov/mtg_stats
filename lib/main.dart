@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/pages/deck_matchups_page.dart';
+import 'package:mtg_stats/pages/deck_synergy_page.dart';
 import 'package:mtg_stats/pages/decks_page.dart';
 import 'package:mtg_stats/pages/game_page.dart';
 import 'package:mtg_stats/pages/games_history_page.dart';
@@ -56,6 +57,7 @@ class MyApp extends StatelessWidget {
         '/games/history': (context) => const GamesHistoryPage(),
         '/stats': (context) => const StatsPage(),
         '/stats/matchups': (context) => const DeckMatchupsPage(),
+        '/stats/synergy': (context) => const DeckSynergyPage(),
         '/stats/meta': (context) => const MetaDashboardPage(),
         '/settings': (context) => const SettingsPage(),
         '/settings/change-password': (context) => const ChangePasswordPage(),

@@ -8,9 +8,9 @@ import 'package:mtg_stats/models/stats.dart';
 import 'package:mtg_stats/models/user.dart';
 import 'package:mtg_stats/pages/deck_card_page.dart';
 import 'package:mtg_stats/pages/deck_picker_page.dart';
+import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/providers/stats_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
-import 'package:mtg_stats/services/deck_service.dart';
 
 /// Экран выбора колод для игроков с двумя режимами: ручной и автовыбор.
 /// В обоих режимах: бросить кубик, ввести вручную или выбрать из списка.
@@ -65,14 +65,15 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
       ),
     );
   }
+
   final TextEditingController _manualSumController = TextEditingController();
-  final DeckService _deckService = DeckService();
 
   List<User> get _allPlayers => [...widget.team1, ...widget.team2];
 
   User? get _currentTargetUser {
     if (_isAutoMode) {
-      if (!_autoSelectionStarted || _currentPlayerIndex >= _playerOrder.length) {
+      if (!_autoSelectionStarted ||
+          _currentPlayerIndex >= _playerOrder.length) {
         return null;
       }
       return _playerOrder[_currentPlayerIndex];
@@ -197,7 +198,8 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
     final deckToAssign = _pickDeckByHistoryWeight(availableDecks);
 
     if (deckToAssign == null) {
-      _showWarning('Все колоды уже выбраны. Освободите колоду или добавьте новую.');
+      _showWarning(
+          'Все колоды уже выбраны. Освободите колоду или добавьте новую.');
       return;
     }
 
@@ -335,8 +337,7 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
                   onPressed: errorText == null &&
                           _manualSumController.text.isNotEmpty
                       ? () {
-                          final sum =
-                              int.tryParse(_manualSumController.text);
+                          final sum = int.tryParse(_manualSumController.text);
                           if (sum != null && sum >= 2 && sum <= 40) {
                             _processManualSum(user, sum);
                             Navigator.of(context).pop();
@@ -407,7 +408,7 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
       MaterialPageRoute(
         builder: (context) => DeckCardPage(
           deck: deck,
-          deckService: _deckService,
+          deckService: ref.read(deckServiceProvider),
           readOnly: !ApiConfig.isAdmin,
         ),
       ),
@@ -423,7 +424,8 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Выбор колод для игроков', style: AppTheme.appBarTitle),
+        title:
+            const Text('Выбор колод для игроков', style: AppTheme.appBarTitle),
         backgroundColor: AppTheme.appBarBackground,
         foregroundColor: AppTheme.appBarForeground,
         elevation: 4,
@@ -543,9 +545,8 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected
-                  ? Colors.blue
-                  : Colors.grey.withValues(alpha: 0.3),
+              color:
+                  isSelected ? Colors.blue : Colors.grey.withValues(alpha: 0.3),
               width: isSelected ? 2 : 1,
             ),
           ),
@@ -586,9 +587,7 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Text(
-          _isAutoMode
-              ? 'Нажмите «Начать выбор» для старта'
-              : 'Выберите игрока',
+          _isAutoMode ? 'Нажмите «Начать выбор» для старта' : 'Выберите игрока',
           style: TextStyle(fontSize: 14, color: Colors.grey[600]),
         ),
       );
@@ -626,7 +625,9 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
                     ),
                   ),
                 IconButton(
-                  onPressed: (_secureInitialized && !_isRolling && _deckOrder.isNotEmpty)
+                  onPressed: (_secureInitialized &&
+                          !_isRolling &&
+                          _deckOrder.isNotEmpty)
                       ? _shuffleDecksForGame
                       : null,
                   icon: const Icon(Icons.shuffle),
@@ -648,21 +649,24 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
                   child: Padding(
                     padding: const EdgeInsets.only(right: 4),
                     child: ElevatedButton.icon(
-                      onPressed: canAct ? () => _rollDiceForDeck(targetUser) : null,
+                      onPressed:
+                          canAct ? () => _rollDiceForDeck(targetUser) : null,
                       icon: _isRolling
                           ? const SizedBox(
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white70),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white70),
                               ),
                             )
                           : const Icon(Icons.casino, size: 18),
-                      label: const Text('Бросить кубики', style: TextStyle(fontSize: 13)),
+                      label: const Text('Бросить кубики',
+                          style: TextStyle(fontSize: 13)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: canAct ? Colors.deepPurple : Colors.grey,
+                        backgroundColor:
+                            canAct ? Colors.deepPurple : Colors.grey,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 10),
@@ -677,11 +681,14 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: ElevatedButton.icon(
-                      onPressed: canAct ? () => _manualSumInput(targetUser) : null,
+                      onPressed:
+                          canAct ? () => _manualSumInput(targetUser) : null,
                       icon: const Icon(Icons.edit, size: 18),
-                      label: const Text('Ввести вручную', style: TextStyle(fontSize: 13)),
+                      label: const Text('Ввести вручную',
+                          style: TextStyle(fontSize: 13)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: canAct ? Colors.amber[700] : Colors.grey,
+                        backgroundColor:
+                            canAct ? Colors.amber[700] : Colors.grey,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 10),
@@ -696,11 +703,14 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
                   child: Padding(
                     padding: const EdgeInsets.only(left: 4),
                     child: ElevatedButton.icon(
-                      onPressed: canAct ? () => _openDeckPicker(targetUser) : null,
+                      onPressed:
+                          canAct ? () => _openDeckPicker(targetUser) : null,
                       icon: const Icon(Icons.collections_bookmark, size: 18),
-                      label: const Text('Выбрать из списка', style: TextStyle(fontSize: 13)),
+                      label: const Text('Выбрать из списка',
+                          style: TextStyle(fontSize: 13)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: canAct ? Colors.blueGrey[700] : Colors.grey,
+                        backgroundColor:
+                            canAct ? Colors.blueGrey[700] : Colors.grey,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 10),
@@ -803,8 +813,8 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
 
   Widget _buildAutoModeContent() {
     final currentUser = _currentTargetUser;
-    final showDiceBlock = _autoSelectionStarted &&
-        _currentPlayerIndex < _playerOrder.length;
+    final showDiceBlock =
+        _autoSelectionStarted && _currentPlayerIndex < _playerOrder.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -827,9 +837,8 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
                     ),
                     const Spacer(),
                     ElevatedButton.icon(
-                      onPressed: _autoSelectionStarted
-                          ? null
-                          : _startAutoSelection,
+                      onPressed:
+                          _autoSelectionStarted ? null : _startAutoSelection,
                       icon: const Icon(Icons.play_arrow, size: 18),
                       label: const Text('Начать выбор'),
                       style: ElevatedButton.styleFrom(
@@ -928,7 +937,8 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
                             },
                       selectedColor: teamColor.withValues(alpha: 0.2),
                       checkmarkColor: teamColor,
-                      side: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
+                      side:
+                          BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
                     );
                   }).toList(),
                 ),
@@ -973,7 +983,8 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
                 final inTeam1 = user != null && widget.team1.contains(user);
                 final teamColor = inTeam1 ? Colors.blue : Colors.green;
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: teamColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
@@ -984,7 +995,8 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
                       CircleAvatar(
                         backgroundColor: teamColor.withValues(alpha: 0.3),
                         radius: 12,
-                        child: Icon(Icons.person, size: 16, color: teamColor[800]),
+                        child:
+                            Icon(Icons.person, size: 16, color: teamColor[800]),
                       ),
                       const SizedBox(width: 8),
                       Text('$userName: '),

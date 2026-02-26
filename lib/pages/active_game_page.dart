@@ -38,11 +38,14 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
   int _lastDisplayTurnSeconds = -1;
   int _lastTeam1Seconds = -1;
   int _lastTeam2Seconds = -1;
+
   /// Режим отображения: false — классический, true — лицом к лицу (2 зоны).
   bool _useFaceToFaceView = false;
+
   /// Развёрнутое изображение колоды по длинному нажатию (в пределах зоны).
   Deck? _expandedDeck;
   int? _expandedDeckTeamNumber;
+
   /// Панель лимитов: false — справа, true — слева.
   bool _panelOnLeft = false;
 
@@ -103,10 +106,23 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
         final game = activeState.activeGame;
         if (game == null) return;
         if (activeState.isPaused) return;
+        final tickTurnElapsed = activeState.currentTurnElapsed;
         final teamLimit = activeState.teamTimeLimitSeconds;
         if (teamLimit > 0) {
-          final t1 = _teamTotalTurnDuration(game, 1, activeState);
-          final t2 = _teamTotalTurnDuration(game, 2, activeState);
+          final t1 = _teamTotalTurnDuration(
+            game,
+            1,
+            activeState.isTurnRunning,
+            activeState.currentTurnTeam,
+            tickTurnElapsed,
+          );
+          final t2 = _teamTotalTurnDuration(
+            game,
+            2,
+            activeState.isTurnRunning,
+            activeState.currentTurnTeam,
+            tickTurnElapsed,
+          );
           if (t1.inSeconds >= teamLimit) {
             await _finishGameTechnicalDefeat(context, 2);
             return;
@@ -117,17 +133,30 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
           }
         }
         final hasTurnLimit = activeState.turnLimitSeconds > 0;
-        final turnElapsed = activeState.currentTurnElapsed;
+        final turnElapsed = tickTurnElapsed;
         final limit = Duration(seconds: activeState.turnLimitSeconds);
-        final overtime =
-            hasTurnLimit && turnElapsed > limit ? turnElapsed - limit : Duration.zero;
+        final overtime = hasTurnLimit && turnElapsed > limit
+            ? turnElapsed - limit
+            : Duration.zero;
         final displayTurn = hasTurnLimit
             ? (overtime > Duration.zero ? overtime : limit - turnElapsed)
             : turnElapsed;
         final totalSeconds = game.totalDuration.inSeconds;
         final displayTurnSeconds = displayTurn.inSeconds;
-        final team1Seconds = _teamTotalTurnDuration(game, 1, activeState).inSeconds;
-        final team2Seconds = _teamTotalTurnDuration(game, 2, activeState).inSeconds;
+        final team1Seconds = _teamTotalTurnDuration(
+          game,
+          1,
+          activeState.isTurnRunning,
+          activeState.currentTurnTeam,
+          turnElapsed,
+        ).inSeconds;
+        final team2Seconds = _teamTotalTurnDuration(
+          game,
+          2,
+          activeState.isTurnRunning,
+          activeState.currentTurnTeam,
+          turnElapsed,
+        ).inSeconds;
         if (totalSeconds != _lastTotalSeconds ||
             displayTurnSeconds != _lastDisplayTurnSeconds ||
             team1Seconds != _lastTeam1Seconds ||
@@ -159,9 +188,14 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
     final isTurnRunning = activeState.isTurnRunning;
     final turnElapsed = activeState.currentTurnElapsed;
     final limit = Duration(seconds: activeState.turnLimitSeconds);
-    final overtime = hasTurnLimit && turnElapsed > limit ? turnElapsed - limit : Duration.zero;
+    final overtime = hasTurnLimit && turnElapsed > limit
+        ? turnElapsed - limit
+        : Duration.zero;
 
-    if (!hasTurnLimit || !_soundEnabled || !isTurnRunning || activeState.isPaused) {
+    if (!hasTurnLimit ||
+        !_soundEnabled ||
+        !isTurnRunning ||
+        activeState.isPaused) {
       if (_playingTrack != null) {
         await _turnAudioPlayer.stop();
         if (mounted) {
@@ -246,7 +280,8 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
     );
   }
 
-  Future<void> _togglePauseWithFeedback(ScaffoldMessengerState messenger) async {
+  Future<void> _togglePauseWithFeedback(
+      ScaffoldMessengerState messenger) async {
     try {
       await ref.read(activeGameControllerProvider.notifier).togglePause();
     } catch (e) {
@@ -267,9 +302,7 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
   @override
   Widget build(BuildContext context) {
     final activeState = ref.watch(activeGameControllerProvider);
-    final decksById = ref.watch(
-      activeGameControllerProvider.select((state) => state.decksById),
-    );
+    final decksById = activeState.decksById;
 
     if (!ApiConfig.isAdmin) {
       return Scaffold(
@@ -284,7 +317,8 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.admin_panel_settings, size: 64, color: Colors.orange[400]),
+                Icon(Icons.admin_panel_settings,
+                    size: 64, color: Colors.orange[400]),
                 const SizedBox(height: 16),
                 Text(
                   'Требуются права администратора',
@@ -343,8 +377,9 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
     final hasTurnLimit = game.turnLimitSeconds > 0;
     final turnElapsed = activeState.currentTurnElapsed;
     final limit = Duration(seconds: activeState.turnLimitSeconds);
-    final overtime =
-        hasTurnLimit && turnElapsed > limit ? turnElapsed - limit : Duration.zero;
+    final overtime = hasTurnLimit && turnElapsed > limit
+        ? turnElapsed - limit
+        : Duration.zero;
     final isOvertime = overtime > Duration.zero;
     // Для отображения таймера хода:
     // - пока нет перерасхода: считаем от лимита вниз до 0;
@@ -352,14 +387,27 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
     final displayTurn = hasTurnLimit
         ? (isOvertime ? overtime : limit - turnElapsed)
         : turnElapsed;
-    final currentTurnTeamPlayers = _teamPlayers(game, activeState.currentTurnTeam);
+    final currentTurnTeamPlayers =
+        _teamPlayers(game, activeState.currentTurnTeam);
 
     final currentTeamName = activeState.currentTurnTeam == 1
         ? activeState.team1Name
         : activeState.team2Name;
     final teamTotalTimeByNumber = <int, Duration>{
-      1: _teamTotalTurnDuration(game, 1, activeState),
-      2: _teamTotalTurnDuration(game, 2, activeState),
+      1: _teamTotalTurnDuration(
+        game,
+        1,
+        activeState.isTurnRunning,
+        activeState.currentTurnTeam,
+        turnElapsed,
+      ),
+      2: _teamTotalTurnDuration(
+        game,
+        2,
+        activeState.isTurnRunning,
+        activeState.currentTurnTeam,
+        turnElapsed,
+      ),
     };
 
     final screenSize = MediaQuery.sizeOf(context);
@@ -382,13 +430,18 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
                   IconButton(
                     icon: const Icon(Icons.share),
                     tooltip: 'Публичная ссылка',
-                    onPressed: () => _showShareLinkDialog(game.publicViewToken!),
+                    onPressed: () =>
+                        _showShareLinkDialog(game.publicViewToken!),
                   ),
                 Tooltip(
-                  message: _useFaceToFaceView ? 'Классический вид' : 'Вид лицом к лицу',
+                  message: _useFaceToFaceView
+                      ? 'Классический вид'
+                      : 'Вид лицом к лицу',
                   child: IconButton(
                     icon: Icon(
-                      _useFaceToFaceView ? Icons.view_agenda : Icons.view_module,
+                      _useFaceToFaceView
+                          ? Icons.view_agenda
+                          : Icons.view_module,
                     ),
                     onPressed: () {
                       setState(() => _useFaceToFaceView = !_useFaceToFaceView);
@@ -406,71 +459,74 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
               activeState,
             )
           : SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-            _TotalTimeCard(
-              totalDuration: totalDuration,
-              isPaused: activeState.isPaused,
-              onTogglePause: () => _togglePauseWithFeedback(
-                ScaffoldMessenger.of(context),
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _TotalTimeCard(
+                    totalDuration: totalDuration,
+                    isPaused: activeState.isPaused,
+                    onTogglePause: () => _togglePauseWithFeedback(
+                      ScaffoldMessenger.of(context),
+                    ),
+                  ),
+                  if (hasTurnLimit) ...[
+                    const SizedBox(height: 16),
+                    _TurnControlCard(
+                      currentTeamName: currentTeamName,
+                      currentTurnTeam: activeState.currentTurnTeam,
+                      currentTurnTeamPlayers: currentTurnTeamPlayers,
+                      soundEnabled: _soundEnabled,
+                      onToggleSound: () {
+                        setState(() => _soundEnabled = !_soundEnabled);
+                        _syncTurnMusic();
+                      },
+                      displayTurn: displayTurn,
+                      isOvertime: isOvertime,
+                      limit: limit,
+                      overtimeMusicPending: _overtimeMusicPending,
+                      onPlayOvertimeMusicFromGesture:
+                          _playOvertimeMusicFromGesture,
+                      isPaused: activeState.isPaused,
+                      isTurnRunning: activeState.isTurnRunning,
+                      onToggleTurn: () => _toggleTurnWithFeedback(
+                        ScaffoldMessenger.of(context),
+                      ),
+                      classicButtonPadding: classicButtonPadding,
+                      classicButtonFontSize: classicButtonFontSize,
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  _TeamCompositionCard(
+                    team1Section: _buildTeamSection(
+                      context,
+                      game,
+                      1,
+                      teamTotalTimeByNumber[1]!,
+                      activeState,
+                    ),
+                    team2Section: _buildTeamSection(
+                      context,
+                      game,
+                      2,
+                      teamTotalTimeByNumber[2]!,
+                      activeState,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  _FinishGameActionButton(
+                    onLongPress: () => _finishGame(context, activeState),
+                    onTapHint: () =>
+                        _showFinishHint(context, compactText: false),
+                  ),
+                ],
               ),
             ),
-            if (hasTurnLimit) ...[
-              const SizedBox(height: 16),
-              _TurnControlCard(
-                currentTeamName: currentTeamName,
-                currentTurnTeam: activeState.currentTurnTeam,
-                currentTurnTeamPlayers: currentTurnTeamPlayers,
-                soundEnabled: _soundEnabled,
-                onToggleSound: () {
-                  setState(() => _soundEnabled = !_soundEnabled);
-                  _syncTurnMusic();
-                },
-                displayTurn: displayTurn,
-                isOvertime: isOvertime,
-                limit: limit,
-                overtimeMusicPending: _overtimeMusicPending,
-                onPlayOvertimeMusicFromGesture: _playOvertimeMusicFromGesture,
-                isPaused: activeState.isPaused,
-                isTurnRunning: activeState.isTurnRunning,
-                onToggleTurn: () => _toggleTurnWithFeedback(
-                  ScaffoldMessenger.of(context),
-                ),
-                classicButtonPadding: classicButtonPadding,
-                classicButtonFontSize: classicButtonFontSize,
-              ),
-            ],
-            const SizedBox(height: 16),
-            _TeamCompositionCard(
-              team1Section: _buildTeamSection(
-                context,
-                game,
-                1,
-                teamTotalTimeByNumber[1]!,
-                activeState,
-              ),
-              team2Section: _buildTeamSection(
-                context,
-                game,
-                2,
-                teamTotalTimeByNumber[2]!,
-                activeState,
-              ),
-            ),
-            const SizedBox(height: 24),
-            _FinishGameActionButton(
-              onLongPress: () => _finishGame(context, activeState),
-              onTapHint: () => _showFinishHint(context, compactText: false),
-            ),
-          ],
-          ),
-        ),
     );
   }
 
-  Future<void> _finishGameTechnicalDefeat(BuildContext context, int winningTeam) async {
+  Future<void> _finishGameTechnicalDefeat(
+      BuildContext context, int winningTeam) async {
     if (ref.read(activeGameControllerProvider).activeGame == null) return;
     final navigator = Navigator.of(context);
     await ref.read(activeGameControllerProvider.notifier).finishGame(
@@ -486,7 +542,9 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
   Duration _teamTotalTurnDuration(
     Game game,
     int teamNumber,
-    ActiveGameState activeState,
+    bool isTurnRunning,
+    int currentTurnTeam,
+    Duration currentTurnElapsed,
   ) {
     final turns = game.turns;
     var total = Duration.zero;
@@ -495,8 +553,8 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
         total += t.duration;
       }
     }
-    if (activeState.isTurnRunning && activeState.currentTurnTeam == teamNumber) {
-      total += activeState.currentTurnElapsed;
+    if (isTurnRunning && currentTurnTeam == teamNumber) {
+      total += currentTurnElapsed;
     }
     return total;
   }
@@ -562,7 +620,8 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
                     showComposition: true,
                     useDeckAvatars: true,
                     decksById: decksById,
-                    expandedDeck: _expandedDeckTeamNumber == 1 ? _expandedDeck : null,
+                    expandedDeck:
+                        _expandedDeckTeamNumber == 1 ? _expandedDeck : null,
                     onDeckTap: (deck) {
                       setState(() {
                         _expandedDeck = deck;
@@ -596,7 +655,8 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
                   showComposition: true,
                   useDeckAvatars: true,
                   decksById: decksById,
-                  expandedDeck: _expandedDeckTeamNumber == 2 ? _expandedDeck : null,
+                  expandedDeck:
+                      _expandedDeckTeamNumber == 2 ? _expandedDeck : null,
                   onDeckTap: (deck) {
                     setState(() {
                       _expandedDeck = deck;
@@ -660,7 +720,8 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
     );
   }
 
-  Future<void> _finishGame(BuildContext context, ActiveGameState activeState) async {
+  Future<void> _finishGame(
+      BuildContext context, ActiveGameState activeState) async {
     final navigator = Navigator.of(context);
     final team1Name = activeState.team1Name;
     final team2Name = activeState.team2Name;
@@ -701,17 +762,26 @@ class _ActiveGamePageState extends ConsumerState<ActiveGamePage> {
     ActiveGameState activeState,
   ) {
     final half = game.players.length ~/ 2;
-    final teamPlayers = game.players.asMap().entries.where(
-          (e) => (teamNumber == 1 && e.key < half) || (teamNumber == 2 && e.key >= half),
-        ).map((e) => e.value).toList();
-    final teamName = teamNumber == 1
-        ? activeState.team1Name
-        : activeState.team2Name;
+    final teamPlayers = game.players
+        .asMap()
+        .entries
+        .where(
+          (e) =>
+              (teamNumber == 1 && e.key < half) ||
+              (teamNumber == 2 && e.key >= half),
+        )
+        .map((e) => e.value)
+        .toList();
+    final teamName =
+        teamNumber == 1 ? activeState.team1Name : activeState.team2Name;
     final teamLimit = activeState.teamTimeLimitSeconds;
     final isTimeWarning = teamLimit > 0 &&
-        (Duration(seconds: teamLimit) - teamTotalTime) <= const Duration(seconds: 30) && // для теста; было 5 мин
+        (Duration(seconds: teamLimit) - teamTotalTime) <=
+            const Duration(seconds: 30) && // для теста; было 5 мин
         teamTotalTime < Duration(seconds: teamLimit);
-    final teamColor = isTimeWarning ? Colors.red : (teamNumber == 1 ? Colors.blue : Colors.green);
+    final teamColor = isTimeWarning
+        ? Colors.red
+        : (teamNumber == 1 ? Colors.blue : Colors.green);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1248,11 +1318,15 @@ class _FaceToFaceSidePanel extends StatelessWidget {
                     ),
                   ),
                   Tooltip(
-                    message: soundEnabled ? 'Выключить музыку' : 'Включить музыку хода',
+                    message: soundEnabled
+                        ? 'Выключить музыку'
+                        : 'Включить музыку хода',
                     child: IconButton(
                       icon: Icon(
                         soundEnabled ? Icons.volume_up : Icons.volume_off,
-                        color: soundEnabled ? AppTheme.appBarForeground : Colors.grey,
+                        color: soundEnabled
+                            ? AppTheme.appBarForeground
+                            : Colors.grey,
                         size: 22,
                       ),
                       onPressed: onToggleSound,
@@ -1283,7 +1357,8 @@ class _FaceToFaceSidePanel extends StatelessWidget {
                           color: Colors.red[700]!.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Icon(Icons.flag, color: Colors.white, size: 26),
+                        child: const Icon(Icons.flag,
+                            color: Colors.white, size: 26),
                       ),
                     ),
                   ),
@@ -1376,8 +1451,9 @@ class _FaceToFaceZone extends StatelessWidget {
     final hasTurnLimit = game.turnLimitSeconds > 0;
     final turnElapsed = currentTurnElapsed;
     final limit = Duration(seconds: game.turnLimitSeconds);
-    final overtime =
-        hasTurnLimit && turnElapsed > limit ? turnElapsed - limit : Duration.zero;
+    final overtime = hasTurnLimit && turnElapsed > limit
+        ? turnElapsed - limit
+        : Duration.zero;
     final isOvertime = overtime > Duration.zero;
     final displayTurn = hasTurnLimit
         ? (isOvertime ? overtime : limit - turnElapsed)
@@ -1441,37 +1517,38 @@ class _FaceToFaceZone extends StatelessWidget {
           children: [
             LayoutBuilder(
               builder: (context, zoneConstraints) {
-                final compositionWithZoneHeight = showComposition && useDeckAvatars
-                    ? Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.max,
-                          children: [
-                            TeamComposition(
-                              teamPlayers: teamPlayers,
-                              color: color,
-                              decksById: decksById,
-                              onDeckTap: onDeckTap,
+                final compositionWithZoneHeight =
+                    showComposition && useDeckAvatars
+                        ? Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.max,
+                              children: [
+                                TeamComposition(
+                                  teamPlayers: teamPlayers,
+                                  color: color,
+                                  decksById: decksById,
+                                  onDeckTap: onDeckTap,
+                                ),
+                                if (timerWidget != null) ...[
+                                  const SizedBox(height: 8),
+                                  timerWidget,
+                                ],
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: isActive
+                                      ? buttonWidget
+                                      : Opacity(
+                                          opacity: 0.5,
+                                          child: buttonWidget,
+                                        ),
+                                ),
+                              ],
                             ),
-                            if (timerWidget != null) ...[
-                              const SizedBox(height: 8),
-                              timerWidget,
-                            ],
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              width: double.infinity,
-                              child: isActive
-                                  ? buttonWidget
-                                  : Opacity(
-                                      opacity: 0.5,
-                                      child: buttonWidget,
-                                    ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : compositionWidget;
+                          )
+                        : compositionWidget;
 
                 return Column(
                   mainAxisAlignment: nameAtTop
@@ -1553,10 +1630,12 @@ class _FaceToFaceZone extends StatelessWidget {
 
 List<GamePlayer> _teamPlayersWithDecks(Game game, int teamNumber) {
   final half = game.players.length ~/ 2;
-  return game.players.asMap().entries
+  return game.players
+      .asMap()
+      .entries
       .where((e) =>
-          (teamNumber == 1 && e.key < half) || (teamNumber == 2 && e.key >= half))
+          (teamNumber == 1 && e.key < half) ||
+          (teamNumber == 2 && e.key >= half))
       .map((e) => e.value)
       .toList();
 }
-

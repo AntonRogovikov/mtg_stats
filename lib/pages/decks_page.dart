@@ -29,6 +29,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
   String _providerDecksSignature = '';
   Map<int, int> _gamesByDeckId = {};
   Map<int, double> _deckChancePercentById = {};
+  String _searchQuery = '';
 
   int _firstDiceValue = 1;
   int _secondDiceValue = 1;
@@ -47,10 +48,9 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
   final TextEditingController _searchController = TextEditingController();
 
   List<Deck> get _filteredDecks {
-    final query = _searchController.text.trim().toLowerCase();
-    if (query.isEmpty) return decks;
+    if (_searchQuery.isEmpty) return decks;
     return decks
-        .where((d) => d.name.toLowerCase().contains(query))
+        .where((d) => d.name.toLowerCase().contains(_searchQuery))
         .toList();
   }
 
@@ -81,7 +81,8 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
 
   String _buildDecksSignature(List<Deck> source) {
     return source
-        .map((d) => '${d.id}|${d.name}|${d.imageUrl ?? ''}|${d.avatarUrl ?? ''}')
+        .map(
+            (d) => '${d.id}|${d.name}|${d.imageUrl ?? ''}|${d.avatarUrl ?? ''}')
         .join(';');
   }
 
@@ -114,10 +115,11 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
     final nextGamesByDeckId = <int, int>{
       for (final stat in statsData.deckStats) stat.deckId: stat.gamesCount,
     };
-    final hasGamesMapChanged = nextGamesByDeckId.length != _gamesByDeckId.length ||
-        nextGamesByDeckId.entries.any(
-          (entry) => _gamesByDeckId[entry.key] != entry.value,
-        );
+    final hasGamesMapChanged =
+        nextGamesByDeckId.length != _gamesByDeckId.length ||
+            nextGamesByDeckId.entries.any(
+              (entry) => _gamesByDeckId[entry.key] != entry.value,
+            );
     if (!hasGamesMapChanged) return;
     setState(() {
       _gamesByDeckId = nextGamesByDeckId;
@@ -517,11 +519,12 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
           if (statsData != null && _gamesByDeckId.isEmpty) {
             _syncDeckStatsFromProvider(statsData);
           }
+          final filteredDecks = _filteredDecks;
 
           return Column(
             children: [
               if (_isDiceSectionVisible) _buildDiceSection(),
-              _buildDecksHeader(),
+              _buildDecksHeader(filteredDecks),
               _buildSearchField(),
               if (decks.isEmpty)
                 Expanded(
@@ -532,7 +535,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
                         : 'Нет колод',
                   ),
                 )
-              else if (_filteredDecks.isEmpty)
+              else if (filteredDecks.isEmpty)
                 const Expanded(
                   child: EmptyStateView(
                     icon: Icons.search_off,
@@ -540,7 +543,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
                   ),
                 )
               else
-                _buildDecksGrid(),
+                _buildDecksGrid(filteredDecks),
               if (_isDiceSectionVisible) _buildSelectionInfo(),
             ],
           );
@@ -550,7 +553,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
   }
 
   Widget _buildSearchField() {
-    final hasSearch = _searchController.text.trim().isNotEmpty;
+    final hasSearch = _searchQuery.isNotEmpty;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       decoration: BoxDecoration(
@@ -559,7 +562,8 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
       ),
       child: TextField(
         controller: _searchController,
-        onChanged: (_) => setState(() {}),
+        onChanged: (value) =>
+            setState(() => _searchQuery = value.trim().toLowerCase()),
         decoration: InputDecoration(
           hintText: 'Поиск по названию колоды',
           prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
@@ -568,7 +572,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
                   icon: Icon(Icons.clear, color: Colors.grey[600]),
                   onPressed: () {
                     _searchController.clear();
-                    setState(() {});
+                    setState(() => _searchQuery = '');
                   },
                 )
               : null,
@@ -576,16 +580,17 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey[400]!),
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           isDense: true,
         ),
       ),
     );
   }
 
-  Widget _buildDecksHeader() {
-    final filteredCount = _filteredDecks.length;
-    final isSearching = _searchController.text.trim().isNotEmpty;
+  Widget _buildDecksHeader(List<Deck> filteredDecks) {
+    final filteredCount = filteredDecks.length;
+    final isSearching = _searchQuery.isNotEmpty;
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       decoration: BoxDecoration(
@@ -773,83 +778,83 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
     );
   }
 
-  Widget _buildDecksGrid() {
+  Widget _buildDecksGrid(List<Deck> filteredDecks) {
     return Expanded(
       child: RefreshIndicator(
         onRefresh: _refreshDecks,
         child: Listener(
           onPointerDown: (PointerDownEvent e) {
-          if (e.kind == PointerDeviceKind.mouse && e.buttons == 1) {
-            setState(() {
-              _isMouseScrollDragging = true;
-              _scrollDragStartOffset = _decksScrollController.offset;
+            if (e.kind == PointerDeviceKind.mouse && e.buttons == 1) {
+              setState(() {
+                _isMouseScrollDragging = true;
+                _scrollDragStartOffset = _decksScrollController.offset;
+                _scrollDragStartPosition = e.position.dy;
+              });
+            }
+          },
+          onPointerMove: (PointerMoveEvent e) {
+            if (_isMouseScrollDragging && e.kind == PointerDeviceKind.mouse) {
+              if (!_decksScrollController.hasClients) return;
+              final delta = e.position.dy - _scrollDragStartPosition;
               _scrollDragStartPosition = e.position.dy;
-            });
-          }
-        },
-        onPointerMove: (PointerMoveEvent e) {
-          if (_isMouseScrollDragging && e.kind == PointerDeviceKind.mouse) {
-            if (!_decksScrollController.hasClients) return;
-            final delta = e.position.dy - _scrollDragStartPosition;
-            _scrollDragStartPosition = e.position.dy;
-            final maxExtent = _decksScrollController.position.maxScrollExtent;
-            final newOffset = (_scrollDragStartOffset + delta)
-                .clamp(0.0, maxExtent);
-            _decksScrollController.jumpTo(newOffset);
-            _scrollDragStartOffset = newOffset;
-          }
-        },
-        onPointerUp: (PointerUpEvent e) {
-          if (e.kind == PointerDeviceKind.mouse) {
+              final maxExtent = _decksScrollController.position.maxScrollExtent;
+              final newOffset =
+                  (_scrollDragStartOffset + delta).clamp(0.0, maxExtent);
+              _decksScrollController.jumpTo(newOffset);
+              _scrollDragStartOffset = newOffset;
+            }
+          },
+          onPointerUp: (PointerUpEvent e) {
+            if (e.kind == PointerDeviceKind.mouse) {
+              setState(() => _isMouseScrollDragging = false);
+            }
+          },
+          onPointerCancel: (PointerCancelEvent e) {
             setState(() => _isMouseScrollDragging = false);
-          }
-        },
-        onPointerCancel: (PointerCancelEvent e) {
-          setState(() => _isMouseScrollDragging = false);
-        },
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: GridView.builder(
-            controller: _decksScrollController,
-            gridDelegate:
-                const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 180,
-              crossAxisSpacing: 20,
-              mainAxisSpacing: 10,
-              childAspectRatio: 0.63,
-            ),
-            itemCount: _filteredDecks.length,
-            itemBuilder: (context, index) {
-              final deck = _filteredDecks[index];
-              final isSelected = _selectedDeckIndex != null &&
-                  _selectedDeckIndex! < decks.length &&
-                  decks[_selectedDeckIndex!].id == deck.id;
-              return DeckCard(
-                key: ValueKey<int>(deck.id),
-                deck: deck,
-                isSelected: isSelected,
-                probabilityBadge: _deckProbabilityBadge(deck),
-                onTap: () {
-                  setState(() {
-                    _selectedDeckIndex = decks.indexWhere((d) => d.id == deck.id);
-                  });
-                },
-                onLongPress: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => FullScreenImagePage(
-                        imagePathOrUrl: deck.imageUrl ?? deck.avatarUrl,
-                        assetFallback: AppConstants.defaultDeckImageAsset,
+          },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: GridView.builder(
+              controller: _decksScrollController,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 180,
+                crossAxisSpacing: 20,
+                mainAxisSpacing: 10,
+                childAspectRatio: 0.63,
+              ),
+              itemCount: filteredDecks.length,
+              itemBuilder: (context, index) {
+                final deck = filteredDecks[index];
+                final isSelected = _selectedDeckIndex != null &&
+                    _selectedDeckIndex! < decks.length &&
+                    decks[_selectedDeckIndex!].id == deck.id;
+                return DeckCard(
+                  key: ValueKey<int>(deck.id),
+                  deck: deck,
+                  isSelected: isSelected,
+                  probabilityBadge: _deckProbabilityBadge(deck),
+                  onTap: () {
+                    setState(() {
+                      _selectedDeckIndex =
+                          decks.indexWhere((d) => d.id == deck.id);
+                    });
+                  },
+                  onLongPress: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => FullScreenImagePage(
+                          imagePathOrUrl: deck.imageUrl ?? deck.avatarUrl,
+                          assetFallback: AppConstants.defaultDeckImageAsset,
+                        ),
                       ),
-                    ),
-                  );
-                },
-                onMenuTap: () => _showDeckOptions(deck),
-              );
-            },
+                    );
+                  },
+                  onMenuTap: () => _showDeckOptions(deck),
+                );
+              },
+            ),
           ),
-        ),
         ),
       ),
     );

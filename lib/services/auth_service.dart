@@ -20,15 +20,20 @@ class LoginResult {
 
 /// API входа: POST /api/auth/login.
 class AuthService {
+  AuthService({http.Client? client}) : _client = client ?? http.Client();
+
+  final http.Client _client;
+
   Future<LoginResult> login(String name, String password) async {
-    final response = await http.post(
+    final response = await _client.post(
       Uri.parse('${ApiConfig.baseUrl}/api/auth/login'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({'name': name.trim(), 'password': password}),
     );
     if (response.statusCode != 200) {
       final body = json.decode(response.body) as Map<String, dynamic>?;
-      final msg = body?['error'] as String? ?? 'Ошибка входа: ${response.statusCode}';
+      final msg =
+          body?['error'] as String? ?? 'Ошибка входа: ${response.statusCode}';
       throw Exception(msg);
     }
     final data = json.decode(response.body) as Map<String, dynamic>;

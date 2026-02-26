@@ -9,8 +9,6 @@ import 'package:mtg_stats/pages/active_game_page.dart';
 import 'package:mtg_stats/providers/active_game_provider.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
-import 'package:mtg_stats/services/deck_service.dart';
-import 'package:mtg_stats/services/game_service.dart';
 import 'package:mtg_stats/widgets/common/async_state_views.dart';
 
 /// Страница истории партий: список завершённых игр.
@@ -66,8 +64,13 @@ class _GamesHistoryPageState extends ConsumerState<GamesHistoryPage> {
   }
 
   static const _weekdayNames = [
-    'понедельник', 'вторник', 'среда', 'четверг',
-    'пятница', 'суббота', 'воскресенье',
+    'понедельник',
+    'вторник',
+    'среда',
+    'четверг',
+    'пятница',
+    'суббота',
+    'воскресенье',
   ];
 
   String _formatDate(DateTime dt, {required int timezoneOffsetMinutes}) {
@@ -333,7 +336,7 @@ class _GamesHistoryPageState extends ConsumerState<GamesHistoryPage> {
                   ),
                   const SizedBox(height: 4),
                   _buildGameTitle(game),
-                  const Divider(),  
+                  const Divider(),
                 ],
               ),
               subtitle: Column(
@@ -392,8 +395,13 @@ class GameDetailPage extends StatelessWidget {
   }
 
   static const _weekdayNames = [
-    'понедельник', 'вторник', 'среда', 'четверг',
-    'пятница', 'суббота', 'воскресенье',
+    'понедельник',
+    'вторник',
+    'среда',
+    'четверг',
+    'пятница',
+    'суббота',
+    'воскресенье',
   ];
 
   String _formatDateWithWeekday(DateTime dt) {
@@ -411,12 +419,14 @@ class GameDetailPage extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     final container = ProviderScope.containerOf(context, listen: false);
     try {
-      final gameService = GameService();
+      final gameService = container.read(gameServiceProvider);
       final rematch = await gameService.createRematch(
         sourceGameId: game.id,
         mode: mode,
       );
-      container.read(activeGameControllerProvider.notifier).setActiveGameFromApi(rematch);
+      container
+          .read(activeGameControllerProvider.notifier)
+          .setActiveGameFromApi(rematch);
       if (!context.mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const ActiveGamePage()),
@@ -598,7 +608,7 @@ class GameDetailPage extends StatelessWidget {
                       Text(
                         'Время по командам:',
                         style: TextStyle(
-                         fontSize: 16,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: Colors.grey[800],
                         ),
@@ -774,7 +784,8 @@ class _DeckLink extends StatelessWidget {
 
   Future<void> _openDeck(BuildContext context) async {
     if (deckId <= 0) return;
-    final deckService = DeckService();
+    final deckService = ProviderScope.containerOf(context, listen: false)
+        .read(deckServiceProvider);
     final deck = await deckService.getDeckById(deckId);
     if (!context.mounted) return;
     if (deck != null) {

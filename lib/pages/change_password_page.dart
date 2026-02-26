@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/core/ui_feedback.dart';
+import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
-import 'package:mtg_stats/services/user_service.dart';
 
 /// Экран смены пароля для авторизованного пользователя.
 class ChangePasswordPage extends StatefulWidget {
@@ -47,11 +48,13 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     }
     setState(() => _changingPassword = true);
     try {
-      await UserService().updateUser(
-        userId,
-        ApiConfig.currentUserName,
-        password: newPass,
-      );
+      await ProviderScope.containerOf(context, listen: false)
+          .read(userServiceProvider)
+          .updateUser(
+            userId,
+            ApiConfig.currentUserName,
+            password: newPass,
+          );
       if (mounted) {
         _newPasswordController.clear();
         _confirmPasswordController.clear();
@@ -138,11 +141,14 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.lock, size: 18),
                         label: Text(
-                          _changingPassword ? 'Сохранение...' : 'Сменить пароль',
+                          _changingPassword
+                              ? 'Сохранение...'
+                              : 'Сменить пароль',
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.blueGrey[800],

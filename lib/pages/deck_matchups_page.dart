@@ -17,7 +17,13 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
   static const int _reliableGamesThreshold = 8;
   int _minGames = 1;
   bool _onlyReliable = false;
-  bool _compactView = true;
+  _SelectedMatchupCell? _selectedCell;
+  _StrengthFilter _strengthFilter = _StrengthFilter.all;
+  List<DeckMatchupStats>? _cachedRawMatchups;
+  List<DeckMatchupStats> _cachedPlayedOnly = const [];
+  List<DeckMatchupStats>? _cachedSearchInput;
+  String _cachedSearchQuery = '';
+  List<DeckMatchupStats> _cachedSearchResult = const [];
 
   @override
   void dispose() {
@@ -27,11 +33,19 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
 
   List<DeckMatchupStats> _applySearch(List<DeckMatchupStats> matchups) {
     final query = _searchController.text.trim().toLowerCase();
-    if (query.isEmpty) return matchups;
-    return matchups.where((m) {
-      return m.deck1Name.toLowerCase().contains(query) ||
-          m.deck2Name.toLowerCase().contains(query);
-    }).toList();
+    if (identical(_cachedSearchInput, matchups) && _cachedSearchQuery == query) {
+      return _cachedSearchResult;
+    }
+    final result = query.isEmpty
+        ? matchups
+        : matchups.where((m) {
+            return m.deck1Name.toLowerCase().contains(query) ||
+                m.deck2Name.toLowerCase().contains(query);
+          }).toList();
+    _cachedSearchInput = matchups;
+    _cachedSearchQuery = query;
+    _cachedSearchResult = result;
+    return result;
   }
 
   Color _heatColor(double rate) {
@@ -46,6 +60,19 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
 
   String _pairKey(String a, String b) {
     return a.compareTo(b) <= 0 ? '$a|$b' : '$b|$a';
+  }
+
+  bool _matchesStrength(double rate) {
+    switch (_strengthFilter) {
+      case _StrengthFilter.strong:
+        return rate >= 60;
+      case _StrengthFilter.weak:
+        return rate <= 40;
+      case _StrengthFilter.neutral:
+        return rate > 40 && rate < 60;
+      case _StrengthFilter.all:
+        return true;
+    }
   }
 
   Widget _legendItem(String label, Color color) {
@@ -70,23 +97,71 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
     final effectiveMinGames = _onlyReliable
         ? (_minGames > _reliableGamesThreshold ? _minGames : _reliableGamesThreshold)
         : _minGames;
-    final filteredByGames = matchups.where((m) => m.gamesCount >= effectiveMinGames).toList();
-
-    final decks = <String>{
-      for (final m in filteredByGames) m.deck1Name,
-      for (final m in filteredByGames) m.deck2Name,
-    }.toList()
-      ..sort();
+    final filteredByGames =
+        matchups.where((m) => m.gamesCount > 0 && m.gamesCount >= effectiveMinGames).toList();
 
     final byPair = <String, DeckMatchupStats>{
       for (final m in filteredByGames) _pairKey(m.deck1Name, m.deck2Name): m,
     };
 
+    double? rateFor(String rowDeck, String colDeck) {
+      final matchup = byPair[_pairKey(rowDeck, colDeck)];
+      if (matchup == null) return null;
+      return matchup.deck1Name == rowDeck ? matchup.deck1WinRate : matchup.deck2WinRate;
+    }
+
+    final activeDecks = <String>{};
+    for (final m in filteredByGames) {
+      if (_matchesStrength(m.deck1WinRate)) {
+        activeDecks.add(m.deck1Name);
+      }
+      if (_matchesStrength(m.deck2WinRate)) {
+        activeDecks.add(m.deck2Name);
+      }
+    }
+
+    final decks = (_strengthFilter == _StrengthFilter.all
+            ? <String>{
+                for (final m in filteredByGames) m.deck1Name,
+                for (final m in filteredByGames) m.deck2Name,
+              }
+            : activeDecks)
+        .toList()
+      ..sort();
+
+    // Repeatedly prune decks that produce empty rows/columns in the current view.
+    // For "all" filter: deck must have at least one real matchup in current set.
+    // For strength filters: deck must have at least one visible matchup in current set.
+    var changed = true;
+    while (changed && decks.isNotEmpty) {
+      changed = false;
+      final remove = <String>{};
+      for (final deck in decks) {
+        var hasMatch = false;
+        for (final other in decks) {
+          if (other == deck) continue;
+          final outRate = rateFor(deck, other);
+          if (outRate == null) continue;
+          if (_strengthFilter == _StrengthFilter.all || _matchesStrength(outRate)) {
+            hasMatch = true;
+            break;
+          }
+        }
+        if (!hasMatch) {
+          remove.add(deck);
+        }
+      }
+      if (remove.isNotEmpty) {
+        decks.removeWhere(remove.contains);
+        changed = true;
+      }
+    }
+
     if (decks.isEmpty) {
       return const EmptyStateView(
         icon: Icons.grid_off,
         title: 'Недостаточно данных',
-        subtitle: 'Снизьте фильтр "минимум игр" или сыграйте больше партий',
+        subtitle: 'Под выбранный фильтр не найдено подходящих колод',
       );
     }
 
@@ -111,7 +186,8 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
                 colDeck: colDeck,
                 matchup: rowDeck == colDeck ? null : byPair[_pairKey(rowDeck, colDeck)],
                 heatColorResolver: _heatColor,
-                compactView: _compactView,
+                isVisible: (rate) => _matchesStrength(rate),
+                onSelect: (selected) => setState(() => _selectedCell = selected),
               ),
           ],
         ),
@@ -127,6 +203,7 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
             spacing: 14,
             runSpacing: 8,
             children: [
+              _legendItem('Надежные: >=$_reliableGamesThreshold игр', Colors.blueGrey.shade300),
               _legendItem('Сильный матчап (>=70%)', _heatColor(72)),
               _legendItem('Ровно (около 50%)', _heatColor(50)),
               _legendItem('Слабый матчап (<=30%)', _heatColor(28)),
@@ -144,9 +221,16 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
               child: SingleChildScrollView(
                 child: Table(
                   defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                  defaultColumnWidth: const FixedColumnWidth(96),
-                  columnWidths: const {0: FixedColumnWidth(180)},
-                  border: TableBorder.all(color: Colors.grey.shade200, width: 0.8),
+                  defaultColumnWidth: const FixedColumnWidth(112),
+                  columnWidths: const {0: FixedColumnWidth(220)},
+                  border: TableBorder(
+                    top: BorderSide(color: Colors.grey.shade300, width: 1.1),
+                    bottom: BorderSide(color: Colors.grey.shade300, width: 1.1),
+                    left: BorderSide(color: Colors.grey.shade300, width: 1.1),
+                    right: BorderSide(color: Colors.grey.shade300, width: 1.1),
+                    horizontalInside: BorderSide(color: Colors.grey.shade200, width: 0.9),
+                    verticalInside: BorderSide(color: Colors.grey.shade500, width: 1.35),
+                  ),
                   children: rows,
                 ),
               ),
@@ -180,7 +264,15 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
           onRetry: () => ref.invalidate(deckMatchupsProvider),
         ),
         data: (matchups) {
-          final filtered = _applySearch(matchups);
+          if (!identical(_cachedRawMatchups, matchups)) {
+            _cachedPlayedOnly = matchups.where((m) => m.gamesCount > 0).toList();
+            _cachedRawMatchups = matchups;
+            _cachedSearchInput = null;
+            _cachedSearchQuery = '';
+            _cachedSearchResult = const [];
+          }
+          final playedOnly = _cachedPlayedOnly;
+          final filtered = _applySearch(playedOnly);
           if (matchups.isEmpty) {
             return const EmptyStateView(
               icon: Icons.grid_view,
@@ -218,7 +310,7 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
                 child: Row(
                   children: [
                     Text(
-                      'Показано: ${filtered.length} из ${matchups.length}',
+                      'Показано: ${filtered.length} из ${playedOnly.length}',
                       style: TextStyle(color: Colors.grey[700]),
                     ),
                   ],
@@ -233,11 +325,16 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
                     Expanded(
                       child: Slider(
                         min: 1,
-                        max: 20,
-                        divisions: 19,
+                        max: 30,
+                        divisions: 29,
                         value: _minGames.toDouble(),
                         label: '$_minGames',
-                        onChanged: (value) => setState(() => _minGames = value.round()),
+                        onChanged: (value) {
+                          setState(() {
+                            _minGames = value.round();
+                            _selectedCell = null;
+                          });
+                        },
                       ),
                     ),
                     Text('$_minGames'),
@@ -253,16 +350,64 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
                     FilterChip(
                       selected: _onlyReliable,
                       label: const Text('Только надежные (>=8 игр)'),
-                      onSelected: (value) => setState(() => _onlyReliable = value),
+                      onSelected: (value) {
+                        setState(() {
+                          _onlyReliable = value;
+                          _selectedCell = null;
+                        });
+                      },
                     ),
-                    FilterChip(
-                      selected: _compactView,
-                      label: const Text('Компактный вид'),
-                      onSelected: (value) => setState(() => _compactView = value),
+                    SegmentedButton<_StrengthFilter>(
+                      segments: const [
+                        ButtonSegment<_StrengthFilter>(
+                          value: _StrengthFilter.all,
+                          label: Text('Все'),
+                        ),
+                        ButtonSegment<_StrengthFilter>(
+                          value: _StrengthFilter.strong,
+                          label: Text('Сильный'),
+                        ),
+                        ButtonSegment<_StrengthFilter>(
+                          value: _StrengthFilter.weak,
+                          label: Text('Слабый'),
+                        ),
+                        ButtonSegment<_StrengthFilter>(
+                          value: _StrengthFilter.neutral,
+                          label: Text('Нейтральный'),
+                        ),
+                      ],
+                      selected: {_strengthFilter},
+                      onSelectionChanged: (value) {
+                        setState(() {
+                          _strengthFilter = value.first;
+                          _selectedCell = null;
+                        });
+                      },
                     ),
                   ],
                 ),
               ),
+              if (_selectedCell != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Card(
+                    child: ListTile(
+                      dense: true,
+                      title: Text(
+                        '${_selectedCell!.rowDeck} vs ${_selectedCell!.colDeck}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        'Winrate: ${_selectedCell!.winRate.toStringAsFixed(1)}%, '
+                        'побед: ${_selectedCell!.wins}, игр: ${_selectedCell!.gamesCount}',
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => setState(() => _selectedCell = null),
+                      ),
+                    ),
+                  ),
+                ),
               Expanded(
                 child: filtered.isEmpty
                     ? const EmptyStateView(
@@ -288,16 +433,21 @@ class _HeaderCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      color: Colors.blueGrey.shade50,
-      child: Text(
-        text,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontWeight: isRowHeader ? FontWeight.w600 : FontWeight.w500,
-          fontSize: 12,
+    return SizedBox(
+      height: 64,
+      child: Container(
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        color: Colors.blueGrey.shade50,
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontWeight: isRowHeader ? FontWeight.w600 : FontWeight.w500,
+            fontSize: 12,
+          ),
         ),
       ),
     );
@@ -310,14 +460,16 @@ class _MatchupHeatCell extends StatelessWidget {
     required this.colDeck,
     required this.matchup,
     required this.heatColorResolver,
-    required this.compactView,
+    required this.isVisible,
+    required this.onSelect,
   });
 
   final String rowDeck;
   final String colDeck;
   final DeckMatchupStats? matchup;
   final Color Function(double rate) heatColorResolver;
-  final bool compactView;
+  final bool Function(double rate) isVisible;
+  final ValueChanged<_SelectedMatchupCell> onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -325,14 +477,14 @@ class _MatchupHeatCell extends StatelessWidget {
       return Container(
         alignment: Alignment.center,
         color: Colors.grey.shade200,
-        height: compactView ? 48 : 62,
+        height: 48,
         child: const Text('—'),
       );
     }
     if (matchup == null) {
       return Container(
         alignment: Alignment.center,
-        height: compactView ? 48 : 62,
+        height: 48,
         child: const Text(
           'n/a',
           style: TextStyle(color: Colors.grey),
@@ -344,51 +496,67 @@ class _MatchupHeatCell extends StatelessWidget {
         m.deck1Name == rowDeck ? m.deck1WinRate : m.deck2WinRate;
     final rowPerspectiveWins =
         m.deck1Name == rowDeck ? m.deck1Wins : m.deck2Wins;
+    if (!isVisible(rowPerspectiveRate)) {
+      return Container(
+        alignment: Alignment.center,
+        height: 48,
+        color: Colors.grey.shade100,
+        child: const Text(
+          '·',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
 
     final bg = heatColorResolver(rowPerspectiveRate);
     final textColor =
         rowPerspectiveRate >= 70 || rowPerspectiveRate <= 30 ? Colors.white : Colors.black87;
 
-    return Tooltip(
-      message:
-          '$rowDeck vs $colDeck\n'
-          'Winrate: ${rowPerspectiveRate.toStringAsFixed(1)}%\n'
-          'Побед: $rowPerspectiveWins\n'
-          'Игр: ${m.gamesCount}',
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        onSelect(
+          _SelectedMatchupCell(
+            rowDeck: rowDeck,
+            colDeck: colDeck,
+            winRate: rowPerspectiveRate,
+            wins: rowPerspectiveWins,
+            gamesCount: m.gamesCount,
+          ),
+        );
+      },
       child: Container(
         color: bg,
-        height: compactView ? 48 : 62,
+        height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        child: compactView
-            ? Center(
-                child: Text(
-                  '${rowPerspectiveRate.toStringAsFixed(0)}%',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
-                ),
-              )
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    '${rowPerspectiveRate.toStringAsFixed(0)}%',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                  Text(
-                    '${m.gamesCount} игр',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: textColor.withValues(alpha: 0.9),
-                    ),
-                  ),
-                ],
-              ),
+        child: Center(
+          child: Text(
+            '${rowPerspectiveRate.toStringAsFixed(0)}%',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: textColor,
+            ),
+          ),
+        ),
       ),
     );
   }
 }
+
+class _SelectedMatchupCell {
+  const _SelectedMatchupCell({
+    required this.rowDeck,
+    required this.colDeck,
+    required this.winRate,
+    required this.wins,
+    required this.gamesCount,
+  });
+
+  final String rowDeck;
+  final String colDeck;
+  final double winRate;
+  final int wins;
+  final int gamesCount;
+}
+
+enum _StrengthFilter { all, strong, weak, neutral }

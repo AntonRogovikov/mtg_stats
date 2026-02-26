@@ -23,9 +23,13 @@ class AppSettings {
 }
 
 class AppSettingsService {
+  AppSettingsService({http.Client? client}) : _client = client ?? http.Client();
+
+  final http.Client _client;
+
   Future<AppSettings> getSettings() async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/api/settings');
-    final response = await http.get(uri, headers: ApiConfig.authHeaders);
+    final response = await _client.get(uri, headers: ApiConfig.authHeaders);
     if (response.statusCode != 200) {
       throw Exception('Не удалось загрузить настройки: ${response.statusCode}');
     }
@@ -35,7 +39,7 @@ class AppSettingsService {
 
   Future<AppSettings> updateTimezone(String timezone) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/api/settings');
-    final response = await http.put(
+    final response = await _client.put(
       uri,
       headers: {
         ...ApiConfig.authHeaders,

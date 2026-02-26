@@ -6,8 +6,12 @@ import 'package:mtg_stats/services/api_config.dart';
 
 /// API статистики: загрузка статистики игроков и колод.
 class StatsService {
+  StatsService({http.Client? client}) : _client = client ?? http.Client();
+
+  final http.Client _client;
+
   Future<List<PlayerStats>> getPlayerStats() async {
-    final response = await http.get(
+    final response = await _client.get(
       Uri.parse('${ApiConfig.baseUrl}/api/stats/players'),
       headers: ApiConfig.authHeaders,
     );
@@ -21,7 +25,7 @@ class StatsService {
   }
 
   Future<List<DeckStats>> getDeckStats() async {
-    final response = await http.get(
+    final response = await _client.get(
       Uri.parse('${ApiConfig.baseUrl}/api/stats/decks'),
       headers: ApiConfig.authHeaders,
     );
@@ -35,7 +39,7 @@ class StatsService {
   }
 
   Future<List<DeckMatchupStats>> getDeckMatchups() async {
-    final response = await http.get(
+    final response = await _client.get(
       Uri.parse('${ApiConfig.baseUrl}/api/stats/deck-matchups'),
       headers: ApiConfig.authHeaders,
     );
@@ -63,7 +67,7 @@ class StatsService {
     }
     final uri = Uri.parse('${ApiConfig.baseUrl}/api/stats/meta-dashboard')
         .replace(queryParameters: query);
-    final response = await http.get(
+    final response = await _client.get(
       uri,
       headers: ApiConfig.authHeaders,
     );

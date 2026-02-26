@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/core/format_utils.dart';
 import 'package:mtg_stats/models/game.dart';
+import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/services/game_service.dart';
 
 class PublicGamePage extends StatefulWidget {
@@ -16,7 +18,7 @@ class PublicGamePage extends StatefulWidget {
 }
 
 class _PublicGamePageState extends State<PublicGamePage> {
-  final GameService _gameService = GameService();
+  late final GameService _gameService;
   StreamSubscription<Game>? _subscription;
   Game? _game;
   DateTime? _lastUpdatedAt;
@@ -25,6 +27,8 @@ class _PublicGamePageState extends State<PublicGamePage> {
   @override
   void initState() {
     super.initState();
+    _gameService = ProviderScope.containerOf(context, listen: false)
+        .read(gameServiceProvider);
     _startStream();
   }
 
@@ -212,7 +216,9 @@ class _PublicGamePageState extends State<PublicGamePage> {
                                 children: [
                                   Chip(
                                     label: Text(
-                                      game.endTime == null ? 'LIVE' : 'Завершена',
+                                      game.endTime == null
+                                          ? 'LIVE'
+                                          : 'Завершена',
                                     ),
                                     backgroundColor: game.endTime == null
                                         ? Colors.green[100]
@@ -229,7 +235,8 @@ class _PublicGamePageState extends State<PublicGamePage> {
                                         'Обновлено: ${TimeOfDay.fromDateTime(_lastUpdatedAt!).format(context)}',
                                       ),
                                     ),
-                                  const Chip(label: Text('Автообновление: 1 сек')),
+                                  const Chip(
+                                      label: Text('Автообновление: 1 сек')),
                                 ],
                               ),
                               if (_lastError != null) ...[
@@ -271,7 +278,8 @@ class _PublicGamePageState extends State<PublicGamePage> {
                             ? 'Текущий ход (${FormatUtils.formatDuration(limitDuration)})'
                             : 'Текущий ход',
                         value: FormatUtils.formatDuration(displayTurn),
-                        color: overtime > Duration.zero ? Colors.red[700] : null,
+                        color:
+                            overtime > Duration.zero ? Colors.red[700] : null,
                       ),
                       const SizedBox(height: 12),
                       Card(
@@ -294,7 +302,8 @@ class _PublicGamePageState extends State<PublicGamePage> {
                               Text(
                                 'Лимит команды: ${game.teamTimeLimitSeconds > 0 ? FormatUtils.formatDuration(Duration(seconds: game.teamTimeLimitSeconds)) : 'без лимита'}',
                               ),
-                              Text('Первой ходила: ${_teamName(game, game.firstMoveTeam)}'),
+                              Text(
+                                  'Первой ходила: ${_teamName(game, game.firstMoveTeam)}'),
                               Text('Пауза: ${game.isPaused ? 'да' : 'нет'}'),
                             ],
                           ),
@@ -315,13 +324,15 @@ class _PublicGamePageState extends State<PublicGamePage> {
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              Text(team1, style: TextStyle(color: Colors.blue[800])),
+                              Text(team1,
+                                  style: TextStyle(color: Colors.blue[800])),
                               const SizedBox(height: 6),
                               ...team1Players.map(
                                 (p) => Text('• ${p.userName} — ${p.deckName}'),
                               ),
                               const SizedBox(height: 10),
-                              Text(team2, style: TextStyle(color: Colors.green[800])),
+                              Text(team2,
+                                  style: TextStyle(color: Colors.green[800])),
                               const SizedBox(height: 6),
                               ...team2Players.map(
                                 (p) => Text('• ${p.userName} — ${p.deckName}'),
@@ -348,20 +359,25 @@ class _PublicGamePageState extends State<PublicGamePage> {
                               if (game.turns.isEmpty)
                                 const Text('Пока нет завершённых ходов')
                               else
-                                ...game.turns.reversed.take(20).toList().asMap().entries.map(
-                                      (entry) {
-                                        final t = entry.value;
-                                        return Padding(
-                                          padding: const EdgeInsets.only(bottom: 6),
-                                          child: Text(
-                                            'Ход ${game.turns.length - entry.key}: '
-                                            '${_teamName(game, t.teamNumber)} · '
-                                            '${FormatUtils.formatDuration(t.duration)}'
-                                            '${t.overtime.inSeconds > 0 ? ' (+${FormatUtils.formatDuration(t.overtime)})' : ''}',
-                                          ),
-                                        );
-                                      },
-                                    ),
+                                ...game.turns.reversed
+                                    .take(20)
+                                    .toList()
+                                    .asMap()
+                                    .entries
+                                    .map(
+                                  (entry) {
+                                    final t = entry.value;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 6),
+                                      child: Text(
+                                        'Ход ${game.turns.length - entry.key}: '
+                                        '${_teamName(game, t.teamNumber)} · '
+                                        '${FormatUtils.formatDuration(t.duration)}'
+                                        '${t.overtime.inSeconds > 0 ? ' (+${FormatUtils.formatDuration(t.overtime)})' : ''}',
+                                      ),
+                                    );
+                                  },
+                                ),
                             ],
                           ),
                         ),

@@ -22,9 +22,13 @@ class HealthResult {
 
 /// Проверка доступности бэкенда: GET /health.
 class HealthService {
+  HealthService({http.Client? client}) : _client = client ?? http.Client();
+
+  final http.Client _client;
+
   Future<HealthResult> check() async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('${ApiConfig.baseUrl}/health'),
         headers: {'Accept': 'application/json'},
       ).timeout(const Duration(seconds: 10));

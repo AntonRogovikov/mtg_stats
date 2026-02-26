@@ -39,6 +39,11 @@ class _StatsPageState extends ConsumerState<StatsPage> {
             tooltip: 'Мета-срез',
             onPressed: () => Navigator.pushNamed(context, '/stats/meta'),
           ),
+          IconButton(
+            icon: const Icon(Icons.handshake_outlined),
+            tooltip: 'Синергия колод',
+            onPressed: () => Navigator.pushNamed(context, '/stats/synergy'),
+          ),
           PopupMenuButton<StatsViewMode>(
             icon: Icon(
               _iconForViewMode(_viewMode),

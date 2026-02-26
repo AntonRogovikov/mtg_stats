@@ -1,9 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/models/stats.dart';
+import 'package:mtg_stats/providers/service_providers.dart';
 import 'package:mtg_stats/services/stats_service.dart';
 
 final statsServiceProvider = Provider<StatsService>((ref) {
-  return StatsService();
+  return StatsService(client: ref.watch(httpClientProvider));
 });
 
 class StatsData {
@@ -14,30 +15,6 @@ class StatsData {
     required this.playerStats,
     required this.deckStats,
   });
-}
-
-class MetaDashboardQuery {
-  final String groupBy;
-  final DateTime? from;
-  final DateTime? to;
-
-  const MetaDashboardQuery({
-    this.groupBy = 'week',
-    this.from,
-    this.to,
-  });
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is MetaDashboardQuery &&
-        other.groupBy == groupBy &&
-        other.from == from &&
-        other.to == to;
-  }
-
-  @override
-  int get hashCode => Object.hash(groupBy, from, to);
 }
 
 final statsDataProvider = FutureProvider<StatsData>((ref) async {
@@ -67,7 +44,8 @@ final statsDataProvider = FutureProvider<StatsData>((ref) async {
   );
 });
 
-final deckMatchupsProvider = FutureProvider<List<DeckMatchupStats>>((ref) async {
+final deckMatchupsProvider =
+    FutureProvider<List<DeckMatchupStats>>((ref) async {
   final statsService = ref.watch(statsServiceProvider);
   final matchups = await statsService.getDeckMatchups();
   matchups.sort((a, b) {
@@ -78,12 +56,7 @@ final deckMatchupsProvider = FutureProvider<List<DeckMatchupStats>>((ref) async 
   return matchups;
 });
 
-final metaDashboardProvider =
-    FutureProvider.family<MetaDashboardData, MetaDashboardQuery>((ref, query) async {
+final metaDashboardProvider = FutureProvider<MetaDashboardData>((ref) async {
   final statsService = ref.watch(statsServiceProvider);
-  return statsService.getMetaDashboard(
-    groupBy: query.groupBy,
-    from: query.from,
-    to: query.to,
-  );
+  return statsService.getMetaDashboard();
 });

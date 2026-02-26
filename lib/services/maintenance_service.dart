@@ -3,6 +3,10 @@ import 'package:mtg_stats/services/api_config.dart';
 
 /// Сервис обслуживания данных: экспорт, импорт, очистка таблиц.
 class MaintenanceService {
+  MaintenanceService({http.Client? client}) : _client = client ?? http.Client();
+
+  final http.Client _client;
+
   /// Скачивает архив с бэкапом всех данных (пользователи, колоды, игры, изображения).
   ///
   /// [includePasswords] — при true в архив включаются хеши паролей (полное восстановление).
@@ -12,7 +16,7 @@ class MaintenanceService {
     if (includePasswords) {
       uri = uri.replace(queryParameters: {'include_passwords': 'true'});
     }
-    final response = await http.get(
+    final response = await _client.get(
       uri,
       headers: {...ApiConfig.authHeaders, 'Accept': 'application/json'},
     );
@@ -29,7 +33,7 @@ class MaintenanceService {
   /// [bytes] — содержимое файла mtg_stats_export.json.gz, отправляется как тело запроса.
   Future<void> importBackupArchive(List<int> bytes) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/api/import/all');
-    final response = await http.post(
+    final response = await _client.post(
       uri,
       headers: {
         ...ApiConfig.authHeaders,
@@ -48,7 +52,7 @@ class MaintenanceService {
   /// Полная очистка игр и ходов.
   Future<void> clearGames() async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/api/games');
-    final response = await http.delete(uri, headers: ApiConfig.authHeaders);
+    final response = await _client.delete(uri, headers: ApiConfig.authHeaders);
     if (response.statusCode != 200 && response.statusCode != 204) {
       throw Exception(
         'Не удалось очистить игры: ${response.statusCode} $uri',
@@ -56,5 +60,3 @@ class MaintenanceService {
     }
   }
 }
-
-
