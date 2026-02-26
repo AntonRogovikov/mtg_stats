@@ -47,6 +47,14 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
 
   String get _searchQuery => _searchController.text.trim().toLowerCase();
 
+  void _openDeckDetail(BuildContext context, String deckName, int deckId) {
+    Navigator.pushNamed(
+      context,
+      '/stats/deck',
+      arguments: {'deckId': deckId, 'deckName': deckName},
+    );
+  }
+
   Color _heatColor(double rate) {
     if (rate >= 70) return Colors.green.shade500;
     if (rate >= 60) return Colors.green.shade300;
@@ -192,13 +200,27 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
     final cellH = isCompact ? 36.0 : 48.0;
     final headerH = isCompact ? 44.0 : 64.0;
 
+    final nameToId = <String, int>{};
+    for (final m in filteredByGames) {
+      nameToId[m.deck1Name] = m.deck1Id;
+      nameToId[m.deck2Name] = m.deck2Id;
+    }
+
     final rows = <TableRow>[];
     rows.add(
       TableRow(
         children: [
           _HeaderCell('Колода', height: headerH, compact: isCompact),
           for (final colDeck in colDecks)
-            _HeaderCell(colDeck, height: headerH, compact: isCompact),
+            _HeaderCell(
+              colDeck,
+              height: headerH,
+              compact: isCompact,
+              deckId: nameToId[colDeck],
+              onTap: nameToId[colDeck] != null
+                  ? () => _openDeckDetail(context, colDeck, nameToId[colDeck]!)
+                  : null,
+            ),
         ],
       ),
     );
@@ -207,7 +229,16 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
       rows.add(
         TableRow(
           children: [
-            _HeaderCell(rowDeck, isRowHeader: true, height: cellH, compact: isCompact),
+            _HeaderCell(
+              rowDeck,
+              isRowHeader: true,
+              height: cellH,
+              compact: isCompact,
+              deckId: nameToId[rowDeck],
+              onTap: nameToId[rowDeck] != null
+                  ? () => _openDeckDetail(context, rowDeck, nameToId[rowDeck]!)
+                  : null,
+            ),
             for (final colDeck in colDecks)
               _MatchupHeatCell(
                 rowDeck: rowDeck,
@@ -339,157 +370,156 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
           }
           return Column(
             children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  12,
-                  16,
-                  6,
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                    hintText: 'Поиск по названию колоды (фильтр строк)',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {});
-                            },
-                          )
-                        : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+              Material(
+                color: Colors.white,
+                child: ExpansionTile(
+                  initiallyExpanded: false,
+                  expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  leading: Icon(
+                    Icons.tune,
+                    color: Colors.blueGrey.shade700,
+                    size: 24,
+                  ),
+                  title: Text(
+                    'Поиск и фильтры',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blueGrey.shade800,
                     ),
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Text(
-                  _searchQuery.isEmpty
-                      ? 'Показано: ${filtered.length} из ${playedOnly.length} матчапов'
-                      : 'Фильтр строк по запросу «${_searchController.text.trim()}»',
-                  style: TextStyle(color: Colors.grey[700], fontSize: 12),
-                ),
-              ),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final compact =
-                      MediaQuery.sizeOf(context).width < AppConstants.desktopBreakpoint;
-                  return Padding(
-                    padding: EdgeInsets.fromLTRB(16, 0, 16, compact ? 4 : 6),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Мин. игр:',
-                          style: TextStyle(
-                            fontSize: compact ? 12 : 14,
-                          ),
-                        ),
-                        SizedBox(width: compact ? 6 : 10),
-                        Expanded(
-                          child: Slider(
-                            min: 1,
-                            max: 30,
-                            divisions: 29,
-                            value: _minGames.toDouble(),
-                            label: '$_minGames',
-                            onChanged: (value) {
-                              setState(() {
-                                _minGames = value.round();
-                                _selectedCell = null;
-                              });
-                            },
-                          ),
-                        ),
-                        Text('$_minGames', style: TextStyle(fontSize: compact ? 12 : 14)),
-                      ],
-                    ),
-                  );
-                },
-              ),
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  0,
-                  16,
-                  MediaQuery.sizeOf(context).width < AppConstants.desktopBreakpoint
-                      ? 6
-                      : 8,
-                ),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
                   children: [
-                    FilterChip(
-                      selected: _onlyReliable,
-                      label: Text(
-                        MediaQuery.sizeOf(context).width < AppConstants.desktopBreakpoint
-                            ? '>=8 игр'
-                            : 'Только надежные (>=8 игр)',
+                    TextField(
+                      controller: _searchController,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'Поиск по названию колоды (фильтр строк)',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {});
+                                },
+                              )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      onSelected: (value) {
-                        setState(() {
-                          _onlyReliable = value;
-                          _selectedCell = null;
-                        });
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _searchQuery.isEmpty
+                          ? 'Показано: ${filtered.length} из ${playedOnly.length} матчапов'
+                          : 'Фильтр строк по запросу «${_searchController.text.trim()}»',
+                      style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final compact =
+                            MediaQuery.sizeOf(context).width < AppConstants.desktopBreakpoint;
+                        return Row(
+                          children: [
+                            Text(
+                              'Мин. игр:',
+                              style: TextStyle(fontSize: compact ? 12 : 14),
+                            ),
+                            SizedBox(width: compact ? 6 : 10),
+                            Expanded(
+                              child: Slider(
+                                min: 1,
+                                max: 30,
+                                divisions: 29,
+                                value: _minGames.toDouble(),
+                                label: '$_minGames',
+                                onChanged: (value) {
+                                  setState(() {
+                                    _minGames = value.round();
+                                    _selectedCell = null;
+                                  });
+                                },
+                              ),
+                            ),
+                            Text('$_minGames', style: TextStyle(fontSize: compact ? 12 : 14)),
+                          ],
+                        );
                       },
                     ),
-                    SegmentedButton<_StrengthFilter>(
-                      segments: const [
-                        ButtonSegment<_StrengthFilter>(
-                          value: _StrengthFilter.all,
-                          label: Text('Все'),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        FilterChip(
+                          selected: _onlyReliable,
+                          label: Text(
+                            MediaQuery.sizeOf(context).width < AppConstants.desktopBreakpoint
+                                ? '>=8 игр'
+                                : 'Только надежные (>=8 игр)',
+                          ),
+                          onSelected: (value) {
+                            setState(() {
+                              _onlyReliable = value;
+                              _selectedCell = null;
+                            });
+                          },
                         ),
-                        ButtonSegment<_StrengthFilter>(
-                          value: _StrengthFilter.strong,
-                          label: Text('Сильный'),
-                        ),
-                        ButtonSegment<_StrengthFilter>(
-                          value: _StrengthFilter.weak,
-                          label: Text('Слабый'),
-                        ),
-                        ButtonSegment<_StrengthFilter>(
-                          value: _StrengthFilter.neutral,
-                          label: Text('Нейтральный'),
+                        SegmentedButton<_StrengthFilter>(
+                          segments: const [
+                            ButtonSegment<_StrengthFilter>(
+                              value: _StrengthFilter.all,
+                              label: Text('Все'),
+                            ),
+                            ButtonSegment<_StrengthFilter>(
+                              value: _StrengthFilter.strong,
+                              label: Text('Сильный'),
+                            ),
+                            ButtonSegment<_StrengthFilter>(
+                              value: _StrengthFilter.weak,
+                              label: Text('Слабый'),
+                            ),
+                            ButtonSegment<_StrengthFilter>(
+                              value: _StrengthFilter.neutral,
+                              label: Text('Нейтральный'),
+                            ),
+                          ],
+                          selected: {_strengthFilter},
+                          onSelectionChanged: (value) {
+                            setState(() {
+                              _strengthFilter = value.first;
+                              _selectedCell = null;
+                            });
+                          },
                         ),
                       ],
-                      selected: {_strengthFilter},
-                      onSelectionChanged: (value) {
-                        setState(() {
-                          _strengthFilter = value.first;
-                          _selectedCell = null;
-                        });
-                      },
                     ),
+                    if (_selectedCell != null) ...[
+                      const SizedBox(height: 8),
+                      Card(
+                        child: ListTile(
+                          dense: true,
+                          title: Text(
+                            '${_selectedCell!.rowDeck} vs ${_selectedCell!.colDeck}',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: Text(
+                            'Winrate: ${_selectedCell!.winRate.toStringAsFixed(1)}%, '
+                            'побед: ${_selectedCell!.wins}, игр: ${_selectedCell!.gamesCount}',
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => setState(() => _selectedCell = null),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-              if (_selectedCell != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Card(
-                    child: ListTile(
-                      dense: true,
-                      title: Text(
-                        '${_selectedCell!.rowDeck} vs ${_selectedCell!.colDeck}',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text(
-                        'Winrate: ${_selectedCell!.winRate.toStringAsFixed(1)}%, '
-                        'побед: ${_selectedCell!.wins}, игр: ${_selectedCell!.gamesCount}',
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => setState(() => _selectedCell = null),
-                      ),
-                    ),
-                  ),
-                ),
               Expanded(
                 child: filtered.isEmpty
                     ? const EmptyStateView(
@@ -508,36 +538,49 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
 }
 
 class _HeaderCell extends StatelessWidget {
-  const _HeaderCell(this.text,
-      {this.isRowHeader = false, this.height = 64, this.compact = false});
+  const _HeaderCell(this.text, {
+    this.isRowHeader = false,
+    this.height = 64,
+    this.compact = false,
+    this.deckId,
+    this.onTap,
+  });
 
   final String text;
   final bool isRowHeader;
   final double height;
   final bool compact;
+  final int? deckId;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: height,
-      child: Container(
-        alignment: Alignment.center,
-        padding: EdgeInsets.symmetric(
-          horizontal: compact ? 4 : 8,
-          vertical: compact ? 4 : 10,
-        ),
-        color: Colors.blueGrey.shade50,
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          maxLines: compact ? 1 : 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontWeight: isRowHeader ? FontWeight.w600 : FontWeight.w500,
-            fontSize: compact ? 10 : 12,
-          ),
+    final child = Container(
+      alignment: Alignment.center,
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 4 : 8,
+        vertical: compact ? 4 : 10,
+      ),
+      color: Colors.blueGrey.shade50,
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        maxLines: compact ? 1 : 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontWeight: isRowHeader ? FontWeight.w600 : FontWeight.w500,
+          fontSize: compact ? 10 : 12,
         ),
       ),
+    );
+    return SizedBox(
+      height: height,
+      child: onTap != null
+          ? InkWell(
+              onTap: onTap,
+              child: child,
+            )
+          : child,
     );
   }
 }

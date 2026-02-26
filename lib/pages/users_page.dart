@@ -35,80 +35,85 @@ class _UsersPageState extends ConsumerState<UsersPage> {
     final passwordController = TextEditingController();
     bool isAdmin = false;
 
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: const Text('Новый пользователь'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Имя',
-                      hintText: '2–100 символов',
-                    ),
-                    autofocus: true,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: passwordController,
-                    decoration: const InputDecoration(
-                      labelText: 'Пароль',
-                      hintText: 'Опционально',
-                    ),
-                    obscureText: true,
-                  ),
-                  const SizedBox(height: 12),
-                  CheckboxListTile(
-                    title: const Text('Администратор'),
-                    value: isAdmin,
-                    onChanged: (v) => setDialogState(() => isAdmin = v ?? false),
-                    controlAffinity: ListTileControlAffinity.leading,
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Отмена'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Создать'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    if (result != true || !mounted) return;
-
-    final name = nameController.text.trim();
-    if (name.length < 2) {
-      _showSnack('Имя от 2 до 100 символов', Colors.orange);
-      return;
-    }
-
     try {
-      await ref.read(userServiceProvider).createUser(
-        name,
-        password: passwordController.text.isNotEmpty
-            ? passwordController.text
-            : null,
-        isAdmin: isAdmin,
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Новый пользователь'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Имя',
+                        hintText: '2–100 символов',
+                      ),
+                      autofocus: true,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: passwordController,
+                      decoration: const InputDecoration(
+                        labelText: 'Пароль',
+                        hintText: 'Опционально',
+                      ),
+                      obscureText: true,
+                    ),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      title: const Text('Администратор'),
+                      value: isAdmin,
+                      onChanged: (v) => setDialogState(() => isAdmin = v ?? false),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Отмена'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Создать'),
+                ),
+              ],
+            );
+          },
+        ),
       );
-      if (mounted) {
-        _showSnack('Пользователь создан', Colors.green);
-        ref.invalidate(usersProvider);
+
+      if (result != true || !mounted) return;
+
+      final name = nameController.text.trim();
+      if (name.length < 2) {
+        _showSnack('Имя от 2 до 100 символов', Colors.orange);
+        return;
       }
-    } catch (e) {
-      _showSnack('Ошибка: $e', Colors.red);
+
+      try {
+        await ref.read(userServiceProvider).createUser(
+          name,
+          password: passwordController.text.isNotEmpty
+              ? passwordController.text
+              : null,
+          isAdmin: isAdmin,
+        );
+        if (mounted) {
+          _showSnack('Пользователь создан', Colors.green);
+          ref.invalidate(usersProvider);
+        }
+      } catch (e) {
+        _showSnack('Ошибка: $e', Colors.red);
+      }
+    } finally {
+      nameController.dispose();
+      passwordController.dispose();
     }
   }
 
@@ -117,81 +122,86 @@ class _UsersPageState extends ConsumerState<UsersPage> {
     final passwordController = TextEditingController();
     bool isAdmin = user.isAdmin;
 
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: const Text('Редактировать пользователя'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Имя',
-                      hintText: '2–100 символов',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: passwordController,
-                    decoration: const InputDecoration(
-                      labelText: 'Новый пароль',
-                      hintText: 'Оставьте пустым, чтобы не менять',
-                    ),
-                    obscureText: true,
-                  ),
-                  if (ApiConfig.isAdmin)
-                    CheckboxListTile(
-                      title: const Text('Администратор'),
-                      value: isAdmin,
-                      onChanged: (v) =>
-                          setDialogState(() => isAdmin = v ?? false),
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Отмена'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Сохранить'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    if (result != true || !mounted) return;
-
-    final name = nameController.text.trim();
-    if (name.length < 2) {
-      _showSnack('Имя от 2 до 100 символов', Colors.orange);
-      return;
-    }
-
     try {
-      await ref.read(userServiceProvider).updateUser(
-        user.id,
-        name,
-        password: passwordController.text.isNotEmpty
-            ? passwordController.text
-            : null,
-        isAdmin: ApiConfig.isAdmin ? isAdmin : null,
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Редактировать пользователя'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Имя',
+                        hintText: '2–100 символов',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: passwordController,
+                      decoration: const InputDecoration(
+                        labelText: 'Новый пароль',
+                        hintText: 'Оставьте пустым, чтобы не менять',
+                      ),
+                      obscureText: true,
+                    ),
+                    if (ApiConfig.isAdmin)
+                      CheckboxListTile(
+                        title: const Text('Администратор'),
+                        value: isAdmin,
+                        onChanged: (v) =>
+                            setDialogState(() => isAdmin = v ?? false),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Отмена'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Сохранить'),
+                ),
+              ],
+            );
+          },
+        ),
       );
-      if (mounted) {
-        _showSnack('Пользователь обновлён', Colors.green);
-        ref.invalidate(usersProvider);
+
+      if (result != true || !mounted) return;
+
+      final name = nameController.text.trim();
+      if (name.length < 2) {
+        _showSnack('Имя от 2 до 100 символов', Colors.orange);
+        return;
       }
-    } catch (e) {
-      _showSnack('Ошибка: $e', Colors.red);
+
+      try {
+        await ref.read(userServiceProvider).updateUser(
+          user.id,
+          name,
+          password: passwordController.text.isNotEmpty
+              ? passwordController.text
+              : null,
+          isAdmin: ApiConfig.isAdmin ? isAdmin : null,
+        );
+        if (mounted) {
+          _showSnack('Пользователь обновлён', Colors.green);
+          ref.invalidate(usersProvider);
+        }
+      } catch (e) {
+        _showSnack('Ошибка: $e', Colors.red);
+      }
+    } finally {
+      nameController.dispose();
+      passwordController.dispose();
     }
   }
 

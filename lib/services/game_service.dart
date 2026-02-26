@@ -214,6 +214,7 @@ class GameService {
       },
       onCancel: () {
         timer?.cancel();
+        controller.close();
       },
     );
 

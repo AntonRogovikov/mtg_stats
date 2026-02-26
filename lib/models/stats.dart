@@ -12,6 +12,10 @@ class PlayerStats {
   final String bestDeckName;
   final int bestDeckWins;
   final int bestDeckGames;
+  final int? currentWinStreak;
+  final int? currentLossStreak;
+  final int? maxWinStreak;
+  final int? maxLossStreak;
 
   const PlayerStats({
     required this.playerName,
@@ -26,6 +30,10 @@ class PlayerStats {
     required this.bestDeckName,
     required this.bestDeckWins,
     required this.bestDeckGames,
+    this.currentWinStreak,
+    this.currentLossStreak,
+    this.maxWinStreak,
+    this.maxLossStreak,
   });
 
   factory PlayerStats.fromJson(Map<String, dynamic> json) {
@@ -43,6 +51,10 @@ class PlayerStats {
       bestDeckName: json['best_deck_name'] as String? ?? '',
       bestDeckWins: json['best_deck_wins'] as int? ?? 0,
       bestDeckGames: json['best_deck_games'] as int? ?? 0,
+      currentWinStreak: json['current_win_streak'] as int?,
+      currentLossStreak: json['current_loss_streak'] as int?,
+      maxWinStreak: json['max_win_streak'] as int?,
+      maxLossStreak: json['max_loss_streak'] as int?,
     );
   }
 }

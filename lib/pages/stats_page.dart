@@ -203,52 +203,109 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         ),
       );
     }
-    return ListView.builder(
+    final totalFirstMoveWins =
+        list.fold<int>(0, (s, p) => s + p.firstMoveWins);
+    final totalFirstMoveGames =
+        list.fold<int>(0, (s, p) => s + p.firstMoveGames);
+    final globalFirstMoveRate = totalFirstMoveGames > 0
+        ? (totalFirstMoveWins / totalFirstMoveGames * 100)
+        : 0.0;
+
+    return ListView(
       padding: const EdgeInsets.all(16),
-      itemCount: list.length,
-      itemBuilder: (context, index) {
-        final s = list[index];
-        return Card(
-          key: ValueKey<String>(s.playerName),
-          margin: const EdgeInsets.only(bottom: 12),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.playerName,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+      children: [
+        if (totalFirstMoveGames > 0)
+          Card(
+            color: Colors.blueGrey.shade50,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Глобально: первый ход',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                _row('Игр', '${s.gamesCount}'),
-                _row('Побед', '${s.winsCount}'),
-                _row('% побед', '${s.winPercent.toStringAsFixed(1)}%'),
-                _row(
-                  '% побед при первом ходе',
-                  '${s.firstMoveWinPercent.toStringAsFixed(1)}% (${s.firstMoveWins}/${s.firstMoveGames})',
-                ),
-                _row(
-                  'Среднее время хода',
-                  _formatDurationSec(s.avgTurnDurationSec),
-                ),
-                _row(
-                  'Макс. время хода',
-                  _formatDurationSec(s.maxTurnDurationSec),
-                ),
-                if (s.bestDeckName.isNotEmpty)
-                  _row(
-                    'Лучшая колода',
-                    s.bestDeckName,
+                  const SizedBox(height: 4),
+                  Text(
+                    'Винрейт при первом ходе: '
+                    '${globalFirstMoveRate.toStringAsFixed(1)}% '
+                    '($totalFirstMoveWins / $totalFirstMoveGames игр)',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-              ],
+                ],
+              ),
             ),
           ),
-        );
-      },
+        if (totalFirstMoveGames > 0) const SizedBox(height: 12),
+        ...List.generate(list.length, (index) {
+          final s = list[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _buildPlayerCard(s),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildPlayerCard(PlayerStats s) {
+    return Card(
+      key: ValueKey<String>(s.playerName),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              s.playerName,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _row('Игр', '${s.gamesCount}'),
+            _row('Побед', '${s.winsCount}'),
+            _row('% побед', '${s.winPercent.toStringAsFixed(1)}%'),
+            if (s.currentWinStreak != null || s.currentLossStreak != null ||
+                s.maxWinStreak != null || s.maxLossStreak != null) ...[
+              if (s.currentWinStreak != null && s.currentWinStreak! > 0)
+                _row('Текущая серия побед', '${s.currentWinStreak}'),
+              if (s.currentLossStreak != null && s.currentLossStreak! > 0)
+                _row('Текущая серия поражений', '${s.currentLossStreak}'),
+              if (s.maxWinStreak != null)
+                _row('Макс. серия побед', '${s.maxWinStreak}'),
+              if (s.maxLossStreak != null)
+                _row('Макс. серия поражений', '${s.maxLossStreak}'),
+            ],
+            _row(
+              '% побед при первом ходе',
+              '${s.firstMoveWinPercent.toStringAsFixed(1)}% (${s.firstMoveWins}/${s.firstMoveGames})',
+            ),
+            _row(
+              'Среднее время хода',
+              _formatDurationSec(s.avgTurnDurationSec),
+            ),
+            _row(
+              'Макс. время хода',
+              _formatDurationSec(s.maxTurnDurationSec),
+            ),
+            if (s.bestDeckName.isNotEmpty)
+              _row(
+                'Лучшая колода',
+                s.bestDeckName,
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -293,6 +350,12 @@ class _StatsPageState extends ConsumerState<StatsPage> {
             subtitle: Text(
               'Игр: ${s.gamesCount}, побед: ${s.winsCount}, '
               'успешность: ${s.winPercent.toStringAsFixed(1)}%',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.pushNamed(
+              context,
+              '/stats/deck',
+              arguments: {'deckId': s.deckId, 'deckName': s.deckName},
             ),
           ),
         );

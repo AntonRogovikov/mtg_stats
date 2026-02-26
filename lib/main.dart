@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/pages/deck_detail_page.dart';
 import 'package:mtg_stats/pages/deck_matchups_page.dart';
 import 'package:mtg_stats/pages/deck_synergy_page.dart';
 import 'package:mtg_stats/pages/decks_page.dart';
@@ -70,6 +71,17 @@ class MyApp extends StatelessWidget {
           return MaterialPageRoute(
             builder: (_) => PublicGamePage(token: token),
           );
+        }
+        if (name == '/stats/deck') {
+          final args = settings.arguments as Map<String, dynamic>?;
+          if (args != null) {
+            return MaterialPageRoute(
+              builder: (_) => DeckDetailPage(
+                deckId: args['deckId'] as int,
+                deckName: args['deckName'] as String,
+              ),
+            );
+          }
         }
         return null;
       },
