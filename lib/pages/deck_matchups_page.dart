@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/core/constants.dart';
 import 'package:mtg_stats/models/stats.dart';
 import 'package:mtg_stats/providers/stats_providers.dart';
 import 'package:mtg_stats/widgets/common/async_state_views.dart';
@@ -31,22 +32,20 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
     super.dispose();
   }
 
+  /// Поиск фильтрует только строки: показываем только строки, где название колоды содержит запрос.
   List<DeckMatchupStats> _applySearch(List<DeckMatchupStats> matchups) {
     final query = _searchController.text.trim().toLowerCase();
     if (identical(_cachedSearchInput, matchups) && _cachedSearchQuery == query) {
       return _cachedSearchResult;
     }
-    final result = query.isEmpty
-        ? matchups
-        : matchups.where((m) {
-            return m.deck1Name.toLowerCase().contains(query) ||
-                m.deck2Name.toLowerCase().contains(query);
-          }).toList();
+    // Возвращаем все матчапы — фильтрация по строкам делается в _buildHeatmapTable
     _cachedSearchInput = matchups;
     _cachedSearchQuery = query;
-    _cachedSearchResult = result;
-    return result;
+    _cachedSearchResult = matchups;
+    return matchups;
   }
+
+  String get _searchQuery => _searchController.text.trim().toLowerCase();
 
   Color _heatColor(double rate) {
     if (rate >= 70) return Colors.green.shade500;
@@ -75,25 +74,25 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
     }
   }
 
-  Widget _legendItem(String label, Color color) {
+  Widget _legendItem(String label, Color color, {bool compact = false}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 14,
-          height: 14,
+          width: compact ? 10 : 14,
+          height: compact ? 10 : 14,
           decoration: BoxDecoration(
             color: color,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(compact ? 2 : 4),
           ),
         ),
-        const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 12)),
+        SizedBox(width: compact ? 4 : 6),
+        Text(label, style: TextStyle(fontSize: compact ? 10 : 12)),
       ],
     );
   }
 
-  Widget _buildHeatmapTable(List<DeckMatchupStats> matchups) {
+  Widget _buildHeatmapTable(BuildContext context, List<DeckMatchupStats> matchups) {
     final effectiveMinGames = _onlyReliable
         ? (_minGames > _reliableGamesThreshold ? _minGames : _reliableGamesThreshold)
         : _minGames;
@@ -120,7 +119,7 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
       }
     }
 
-    final decks = (_strengthFilter == _StrengthFilter.all
+    var allDecks = (_strengthFilter == _StrengthFilter.all
             ? <String>{
                 for (final m in filteredByGames) m.deck1Name,
                 for (final m in filteredByGames) m.deck2Name,
@@ -129,16 +128,37 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
         .toList()
       ..sort();
 
-    // Repeatedly prune decks that produce empty rows/columns in the current view.
-    // For "all" filter: deck must have at least one real matchup in current set.
-    // For strength filters: deck must have at least one visible matchup in current set.
+    // Поиск фильтрует только строки: rowDecks — только колоды, чьё название содержит запрос
+    final query = _searchQuery;
+    List<String> rowDecks;
+    List<String> colDecks;
+    if (query.isNotEmpty) {
+      rowDecks = allDecks.where((d) => d.toLowerCase().contains(query)).toList();
+      // Столбцы — все колоды, у которых есть матчапы с rowDecks
+      final rowSet = rowDecks.toSet();
+      colDecks = allDecks
+          .where((d) {
+            if (rowSet.contains(d)) return true;
+            for (final r in rowDecks) {
+              if (rateFor(r, d) != null || rateFor(d, r) != null) return true;
+            }
+            return false;
+          })
+          .toList()
+        ..sort();
+    } else {
+      rowDecks = List.from(allDecks);
+      colDecks = List.from(allDecks);
+    }
+
+    // Prune rowDecks: убрать строки без видимых матчапов
     var changed = true;
-    while (changed && decks.isNotEmpty) {
+    while (changed && rowDecks.isNotEmpty) {
       changed = false;
       final remove = <String>{};
-      for (final deck in decks) {
+      for (final deck in rowDecks) {
         var hasMatch = false;
-        for (final other in decks) {
+        for (final other in colDecks) {
           if (other == deck) continue;
           final outRate = rateFor(deck, other);
           if (outRate == null) continue;
@@ -152,35 +172,43 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
         }
       }
       if (remove.isNotEmpty) {
-        decks.removeWhere(remove.contains);
+        rowDecks.removeWhere(remove.contains);
         changed = true;
       }
     }
 
-    if (decks.isEmpty) {
-      return const EmptyStateView(
+    if (rowDecks.isEmpty) {
+      return EmptyStateView(
         icon: Icons.grid_off,
-        title: 'Недостаточно данных',
-        subtitle: 'Под выбранный фильтр не найдено подходящих колод',
+        title: query.isNotEmpty ? 'Строки не найдены' : 'Недостаточно данных',
+        subtitle: query.isNotEmpty
+            ? 'Нет колод, чьё название содержит «${_searchController.text.trim()}»'
+            : 'Под выбранный фильтр не найдено подходящих колод',
       );
     }
+
+    final isCompact =
+        MediaQuery.sizeOf(context).width < AppConstants.desktopBreakpoint;
+    final cellH = isCompact ? 36.0 : 48.0;
+    final headerH = isCompact ? 44.0 : 64.0;
 
     final rows = <TableRow>[];
     rows.add(
       TableRow(
         children: [
-          const _HeaderCell('Колода'),
-          for (final colDeck in decks) _HeaderCell(colDeck),
+          _HeaderCell('Колода', height: headerH, compact: isCompact),
+          for (final colDeck in colDecks)
+            _HeaderCell(colDeck, height: headerH, compact: isCompact),
         ],
       ),
     );
 
-    for (final rowDeck in decks) {
+    for (final rowDeck in rowDecks) {
       rows.add(
         TableRow(
           children: [
-            _HeaderCell(rowDeck, isRowHeader: true),
-            for (final colDeck in decks)
+            _HeaderCell(rowDeck, isRowHeader: true, height: cellH, compact: isCompact),
+            for (final colDeck in colDecks)
               _MatchupHeatCell(
                 rowDeck: rowDeck,
                 colDeck: colDeck,
@@ -188,6 +216,8 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
                 heatColorResolver: _heatColor,
                 isVisible: (rate) => _matchesStrength(rate),
                 onSelect: (selected) => setState(() => _selectedCell = selected),
+                cellHeight: cellH,
+                compact: isCompact,
               ),
           ],
         ),
@@ -198,31 +228,56 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          padding: EdgeInsets.symmetric(
+            horizontal: 4,
+            vertical: isCompact ? 2 : 2,
+          ),
           child: Wrap(
-            spacing: 14,
-            runSpacing: 8,
+            spacing: isCompact ? 8 : 14,
+            runSpacing: isCompact ? 4 : 8,
             children: [
-              _legendItem('Надежные: >=$_reliableGamesThreshold игр', Colors.blueGrey.shade300),
-              _legendItem('Сильный матчап (>=70%)', _heatColor(72)),
-              _legendItem('Ровно (около 50%)', _heatColor(50)),
-              _legendItem('Слабый матчап (<=30%)', _heatColor(28)),
+              _legendItem(
+                isCompact ? '>=8' : 'Надежные: >=$_reliableGamesThreshold игр',
+                Colors.blueGrey.shade300,
+                compact: isCompact,
+              ),
+              _legendItem(
+                isCompact ? '>=70%' : 'Сильный матчап (>=70%)',
+                _heatColor(72),
+                compact: isCompact,
+              ),
+              _legendItem(
+                isCompact ? '~50%' : 'Ровно (около 50%)',
+                _heatColor(50),
+                compact: isCompact,
+              ),
+              _legendItem(
+                isCompact ? '<=30%' : 'Слабый матчап (<=30%)',
+                _heatColor(28),
+                compact: isCompact,
+              ),
             ],
           ),
         ),
         const SizedBox(height: 8),
         Expanded(
-          child: InteractiveViewer(
-            constrained: false,
-            minScale: 0.75,
-            maxScale: 2.0,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(
-                child: Table(
-                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                  defaultColumnWidth: const FixedColumnWidth(112),
-                  columnWidths: const {0: FixedColumnWidth(220)},
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isCompact =
+                  MediaQuery.sizeOf(context).width < AppConstants.desktopBreakpoint;
+              final cellW = isCompact ? 56.0 : 112.0;
+              final rowHeaderW = isCompact ? 120.0 : 220.0;
+              return InteractiveViewer(
+                constrained: false,
+                minScale: isCompact ? 0.5 : 0.75,
+                maxScale: 2.0,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SingleChildScrollView(
+                    child: Table(
+                      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                      defaultColumnWidth: FixedColumnWidth(cellW),
+                      columnWidths: {0: FixedColumnWidth(rowHeaderW)},
                   border: TableBorder(
                     top: BorderSide(color: Colors.grey.shade300, width: 1.1),
                     bottom: BorderSide(color: Colors.grey.shade300, width: 1.1),
@@ -235,6 +290,8 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
                 ),
               ),
             ),
+          );
+            },
           ),
         ),
       ],
@@ -283,12 +340,17 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
           return Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  16,
+                  6,
+                ),
                 child: TextField(
                   controller: _searchController,
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
-                    hintText: 'Поиск по названию колоды',
+                    hintText: 'Поиск по названию колоды (фильтр строк)',
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
@@ -307,49 +369,69 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Row(
-                  children: [
-                    Text(
-                      'Показано: ${filtered.length} из ${playedOnly.length}',
-                      style: TextStyle(color: Colors.grey[700]),
-                    ),
-                  ],
+                child: Text(
+                  _searchQuery.isEmpty
+                      ? 'Показано: ${filtered.length} из ${playedOnly.length} матчапов'
+                      : 'Фильтр строк по запросу «${_searchController.text.trim()}»',
+                  style: TextStyle(color: Colors.grey[700], fontSize: 12),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-                child: Row(
-                  children: [
-                    const Text('Минимум игр в матчапе:'),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Slider(
-                        min: 1,
-                        max: 30,
-                        divisions: 29,
-                        value: _minGames.toDouble(),
-                        label: '$_minGames',
-                        onChanged: (value) {
-                          setState(() {
-                            _minGames = value.round();
-                            _selectedCell = null;
-                          });
-                        },
-                      ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact =
+                      MediaQuery.sizeOf(context).width < AppConstants.desktopBreakpoint;
+                  return Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, compact ? 4 : 6),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Мин. игр:',
+                          style: TextStyle(
+                            fontSize: compact ? 12 : 14,
+                          ),
+                        ),
+                        SizedBox(width: compact ? 6 : 10),
+                        Expanded(
+                          child: Slider(
+                            min: 1,
+                            max: 30,
+                            divisions: 29,
+                            value: _minGames.toDouble(),
+                            label: '$_minGames',
+                            onChanged: (value) {
+                              setState(() {
+                                _minGames = value.round();
+                                _selectedCell = null;
+                              });
+                            },
+                          ),
+                        ),
+                        Text('$_minGames', style: TextStyle(fontSize: compact ? 12 : 14)),
+                      ],
                     ),
-                    Text('$_minGames'),
-                  ],
-                ),
+                  );
+                },
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  0,
+                  16,
+                  MediaQuery.sizeOf(context).width < AppConstants.desktopBreakpoint
+                      ? 6
+                      : 8,
+                ),
                 child: Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
                     FilterChip(
                       selected: _onlyReliable,
-                      label: const Text('Только надежные (>=8 игр)'),
+                      label: Text(
+                        MediaQuery.sizeOf(context).width < AppConstants.desktopBreakpoint
+                            ? '>=8 игр'
+                            : 'Только надежные (>=8 игр)',
+                      ),
                       onSelected: (value) {
                         setState(() {
                           _onlyReliable = value;
@@ -415,7 +497,7 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
                         title: 'Ничего не найдено',
                         subtitle: 'Попробуйте другой запрос',
                       )
-                    : _buildHeatmapTable(filtered),
+                    : _buildHeatmapTable(context, filtered),
               ),
             ],
           );
@@ -426,27 +508,33 @@ class _DeckMatchupsPageState extends ConsumerState<DeckMatchupsPage> {
 }
 
 class _HeaderCell extends StatelessWidget {
-  const _HeaderCell(this.text, {this.isRowHeader = false});
+  const _HeaderCell(this.text,
+      {this.isRowHeader = false, this.height = 64, this.compact = false});
 
   final String text;
   final bool isRowHeader;
+  final double height;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 64,
+      height: height,
       child: Container(
         alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 4 : 8,
+          vertical: compact ? 4 : 10,
+        ),
         color: Colors.blueGrey.shade50,
         child: Text(
           text,
           textAlign: TextAlign.center,
-          maxLines: 2,
+          maxLines: compact ? 1 : 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontWeight: isRowHeader ? FontWeight.w600 : FontWeight.w500,
-            fontSize: 12,
+            fontSize: compact ? 10 : 12,
           ),
         ),
       ),
@@ -462,6 +550,8 @@ class _MatchupHeatCell extends StatelessWidget {
     required this.heatColorResolver,
     required this.isVisible,
     required this.onSelect,
+    this.cellHeight = 48,
+    this.compact = false,
   });
 
   final String rowDeck;
@@ -470,6 +560,8 @@ class _MatchupHeatCell extends StatelessWidget {
   final Color Function(double rate) heatColorResolver;
   final bool Function(double rate) isVisible;
   final ValueChanged<_SelectedMatchupCell> onSelect;
+  final double cellHeight;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -477,14 +569,14 @@ class _MatchupHeatCell extends StatelessWidget {
       return Container(
         alignment: Alignment.center,
         color: Colors.grey.shade200,
-        height: 48,
+        height: cellHeight,
         child: const Text('—'),
       );
     }
     if (matchup == null) {
       return Container(
         alignment: Alignment.center,
-        height: 48,
+        height: cellHeight,
         child: const Text(
           'n/a',
           style: TextStyle(color: Colors.grey),
@@ -499,7 +591,7 @@ class _MatchupHeatCell extends StatelessWidget {
     if (!isVisible(rowPerspectiveRate)) {
       return Container(
         alignment: Alignment.center,
-        height: 48,
+        height: cellHeight,
         color: Colors.grey.shade100,
         child: const Text(
           '·',
@@ -527,13 +619,17 @@ class _MatchupHeatCell extends StatelessWidget {
       },
       child: Container(
         color: bg,
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        height: cellHeight,
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 2 : 4,
+          vertical: compact ? 2 : 6,
+        ),
         child: Center(
           child: Text(
             '${rowPerspectiveRate.toStringAsFixed(0)}%',
             style: TextStyle(
               fontWeight: FontWeight.bold,
+              fontSize: compact ? 10 : 14,
               color: textColor,
             ),
           ),

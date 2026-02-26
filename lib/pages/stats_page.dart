@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/core/format_utils.dart';
 import 'package:mtg_stats/models/stats.dart';
 import 'package:mtg_stats/providers/stats_providers.dart';
 import 'package:mtg_stats/widgets/common/async_state_views.dart';
@@ -29,55 +30,72 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         backgroundColor: AppTheme.appBarBackground,
         foregroundColor: AppTheme.appBarForeground,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.grid_view),
-            tooltip: 'Матрица матчапов',
-            onPressed: () => Navigator.pushNamed(context, '/stats/matchups'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.insights),
-            tooltip: 'Мета-срез',
-            onPressed: () => Navigator.pushNamed(context, '/stats/meta'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.handshake_outlined),
-            tooltip: 'Синергия колод',
-            onPressed: () => Navigator.pushNamed(context, '/stats/synergy'),
-          ),
-          PopupMenuButton<StatsViewMode>(
-            icon: Icon(
-              _iconForViewMode(_viewMode),
-              color: AppTheme.appBarForeground,
-            ),
-            tooltip: 'Вид статистики',
-            onSelected: (mode) => setState(() => _viewMode = mode),
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, color: AppTheme.appBarForeground),
+            tooltip: 'Меню',
+            onSelected: (value) {
+              switch (value) {
+                case '/stats/matchups':
+                case '/stats/meta':
+                case '/stats/synergy':
+                  Navigator.pushNamed(context, value);
+                  break;
+                case 'list':
+                case 'histogram':
+                case 'pie':
+                case 'podium':
+                  setState(() => _viewMode = _viewModeFromString(value));
+                  break;
+              }
+            },
             itemBuilder: (context) => [
               const PopupMenuItem(
-                value: StatsViewMode.list,
+                value: 'list',
                 child: ListTile(
                   leading: Icon(Icons.list),
                   title: Text('Список'),
                 ),
               ),
               const PopupMenuItem(
-                value: StatsViewMode.histogram,
+                value: 'histogram',
                 child: ListTile(
                   leading: Icon(Icons.bar_chart),
                   title: Text('Гистограмма'),
                 ),
               ),
               const PopupMenuItem(
-                value: StatsViewMode.pie,
+                value: 'pie',
                 child: ListTile(
                   leading: Icon(Icons.pie_chart),
                   title: Text('Круговая диаграмма'),
                 ),
               ),
               const PopupMenuItem(
-                value: StatsViewMode.podium,
+                value: 'podium',
                 child: ListTile(
                   leading: Icon(Icons.emoji_events),
                   title: Text('Подиум'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: '/stats/matchups',
+                child: ListTile(
+                  leading: Icon(Icons.grid_view),
+                  title: Text('Матрица матчапов'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: '/stats/meta',
+                child: ListTile(
+                  leading: Icon(Icons.insights),
+                  title: Text('Мета-срез'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: '/stats/synergy',
+                child: ListTile(
+                  leading: Icon(Icons.handshake_outlined),
+                  title: Text('Синергия колод'),
                 ),
               ),
             ],
@@ -121,6 +139,19 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         ),
       ),
     );
+  }
+
+  StatsViewMode _viewModeFromString(String value) {
+    switch (value) {
+      case 'histogram':
+        return StatsViewMode.histogram;
+      case 'pie':
+        return StatsViewMode.pie;
+      case 'podium':
+        return StatsViewMode.podium;
+      default:
+        return StatsViewMode.list;
+    }
   }
 
   IconData _iconForViewMode(StatsViewMode mode) {
@@ -200,8 +231,14 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                   '% побед при первом ходе',
                   '${s.firstMoveWinPercent.toStringAsFixed(1)}% (${s.firstMoveWins}/${s.firstMoveGames})',
                 ),
-                _row('Среднее время хода', '${s.avgTurnDurationSec} сек'),
-                _row('Макс. время хода', '${s.maxTurnDurationSec} сек'),
+                _row(
+                  'Среднее время хода',
+                  _formatDurationSec(s.avgTurnDurationSec),
+                ),
+                _row(
+                  'Макс. время хода',
+                  _formatDurationSec(s.maxTurnDurationSec),
+                ),
                 if (s.bestDeckName.isNotEmpty)
                   _row(
                     'Лучшая колода',
@@ -213,6 +250,11 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         );
       },
     );
+  }
+
+  String _formatDurationSec(int seconds) {
+    final s = FormatUtils.formatDurationHuman(Duration(seconds: seconds));
+    return s.isEmpty ? '0 секунд' : s;
   }
 
   Widget _row(String label, String value) {
