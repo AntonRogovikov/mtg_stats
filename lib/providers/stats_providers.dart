@@ -43,15 +43,3 @@ final statsDataProvider = FutureProvider<StatsData>((ref) async {
     deckStats: deckStats,
   );
 });
-
-final deckMatchupsProvider =
-    FutureProvider<List<DeckMatchupStats>>((ref) async {
-  final statsService = ref.watch(statsServiceProvider);
-  final matchups = await statsService.getDeckMatchups();
-  matchups.sort((a, b) {
-    final byDeck1 = a.deck1Name.compareTo(b.deck1Name);
-    if (byDeck1 != 0) return byDeck1;
-    return a.deck2Name.compareTo(b.deck2Name);
-  });
-  return matchups;
-});

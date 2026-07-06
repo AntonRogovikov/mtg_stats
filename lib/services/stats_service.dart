@@ -37,19 +37,4 @@ class StatsService {
         .map((e) => DeckStats.fromJson(e as Map<String, dynamic>))
         .toList();
   }
-
-  Future<List<DeckMatchupStats>> getDeckMatchups() async {
-    final response = await _client.get(
-      Uri.parse('${ApiConfig.baseUrl}/api/stats/deck-matchups'),
-      headers: ApiConfig.authHeaders,
-    );
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load deck matchups: ${response.statusCode}');
-    }
-    final body = json.decode(response.body) as Map<String, dynamic>;
-    final list = body['matchups'] as List<dynamic>? ?? const [];
-    return list
-        .map((e) => DeckMatchupStats.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
 }

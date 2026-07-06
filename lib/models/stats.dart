@@ -86,44 +86,6 @@ class DeckStats {
   }
 }
 
-/// Статистика матчапа между парой колод.
-class DeckMatchupStats {
-  final int deck1Id;
-  final String deck1Name;
-  final int deck2Id;
-  final String deck2Name;
-  final int gamesCount;
-  final int deck1Wins;
-  final int deck2Wins;
-  final double deck1WinRate;
-  final double deck2WinRate;
-
-  const DeckMatchupStats({
-    required this.deck1Id,
-    required this.deck1Name,
-    required this.deck2Id,
-    required this.deck2Name,
-    required this.gamesCount,
-    required this.deck1Wins,
-    required this.deck2Wins,
-    required this.deck1WinRate,
-    required this.deck2WinRate,
-  });
-
-  factory DeckMatchupStats.fromJson(Map<String, dynamic> json) {
-    return DeckMatchupStats(
-      deck1Id: json['deck1_id'] as int? ?? 0,
-      deck1Name: json['deck1_name'] as String? ?? '',
-      deck2Id: json['deck2_id'] as int? ?? 0,
-      deck2Name: json['deck2_name'] as String? ?? '',
-      gamesCount: json['games_count'] as int? ?? 0,
-      deck1Wins: json['deck1_wins'] as int? ?? 0,
-      deck2Wins: json['deck2_wins'] as int? ?? 0,
-      deck1WinRate: (json['deck1_win_rate'] as num?)?.toDouble() ?? 0,
-      deck2WinRate: (json['deck2_win_rate'] as num?)?.toDouble() ?? 0,
-    );
-  }
-}
-
-// Модели мета-дашборда (MetaDeckStat, MetaPeriodStats, MetaDashboardData)
-// удалены вместе со страницами мета-среза/матчапов/синергии — см. историю git.
+// Модели матчапов и мета-дашборда (DeckMatchupStats, MetaDeckStat,
+// MetaPeriodStats, MetaDashboardData) удалены вместе с функциями
+// матчапов/мета-среза/синергии — см. историю git.
