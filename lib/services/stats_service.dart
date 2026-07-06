@@ -52,29 +52,4 @@ class StatsService {
         .map((e) => DeckMatchupStats.fromJson(e as Map<String, dynamic>))
         .toList();
   }
-
-  Future<MetaDashboardData> getMetaDashboard({
-    String groupBy = 'week',
-    DateTime? from,
-    DateTime? to,
-  }) async {
-    final query = <String, String>{'group_by': groupBy};
-    if (from != null) {
-      query['from'] = from.toIso8601String().split('T').first;
-    }
-    if (to != null) {
-      query['to'] = to.toIso8601String().split('T').first;
-    }
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/stats/meta-dashboard')
-        .replace(queryParameters: query);
-    final response = await _client.get(
-      uri,
-      headers: ApiConfig.authHeaders,
-    );
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load meta dashboard: ${response.statusCode}');
-    }
-    final body = json.decode(response.body) as Map<String, dynamic>;
-    return MetaDashboardData.fromJson(body);
-  }
 }

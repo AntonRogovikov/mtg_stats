@@ -55,8 +55,3 @@ final deckMatchupsProvider =
   });
   return matchups;
 });
-
-final metaDashboardProvider = FutureProvider<MetaDashboardData>((ref) async {
-  final statsService = ref.watch(statsServiceProvider);
-  return statsService.getMetaDashboard();
-});

@@ -35,11 +35,6 @@ class _StatsPageState extends ConsumerState<StatsPage> {
             tooltip: 'Меню',
             onSelected: (value) {
               switch (value) {
-                case '/stats/matchups':
-                case '/stats/meta':
-                case '/stats/synergy':
-                  Navigator.pushNamed(context, value);
-                  break;
                 case 'list':
                 case 'histogram':
                 case 'pie':
@@ -75,27 +70,6 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                 child: ListTile(
                   leading: Icon(Icons.emoji_events),
                   title: Text('Подиум'),
-                ),
-              ),
-              const PopupMenuItem(
-                value: '/stats/matchups',
-                child: ListTile(
-                  leading: Icon(Icons.grid_view),
-                  title: Text('Матрица матчапов'),
-                ),
-              ),
-              const PopupMenuItem(
-                value: '/stats/meta',
-                child: ListTile(
-                  leading: Icon(Icons.insights),
-                  title: Text('Мета-срез'),
-                ),
-              ),
-              const PopupMenuItem(
-                value: '/stats/synergy',
-                child: ListTile(
-                  leading: Icon(Icons.handshake_outlined),
-                  title: Text('Синергия колод'),
                 ),
               ),
             ],
@@ -151,19 +125,6 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         return StatsViewMode.podium;
       default:
         return StatsViewMode.list;
-    }
-  }
-
-  IconData _iconForViewMode(StatsViewMode mode) {
-    switch (mode) {
-      case StatsViewMode.list:
-        return Icons.list;
-      case StatsViewMode.histogram:
-        return Icons.bar_chart;
-      case StatsViewMode.pie:
-        return Icons.pie_chart;
-      case StatsViewMode.podium:
-        return Icons.emoji_events;
     }
   }
 
