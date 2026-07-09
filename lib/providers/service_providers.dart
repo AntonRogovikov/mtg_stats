@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/models/user.dart';
+import 'package:mtg_stats/providers/slice_providers.dart';
 import 'package:mtg_stats/services/auth_service.dart';
 import 'package:mtg_stats/services/app_settings_service.dart';
 import 'package:mtg_stats/services/deck_service.dart';
@@ -62,7 +63,8 @@ final decksProvider = FutureProvider<List<Deck>>((ref) async {
 
 final gamesHistoryProvider = FutureProvider<List<Game>>((ref) async {
   final gameService = ref.watch(gameServiceProvider);
-  final games = await gameService.getGames();
+  final sliceId = ref.watch(currentSliceIdProvider);
+  final games = await gameService.getGames(sliceId: sliceId);
   games.sort((a, b) {
     final idA = int.tryParse(a.id) ?? 0;
     final idB = int.tryParse(b.id) ?? 0;

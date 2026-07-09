@@ -6,7 +6,7 @@ import 'package:mtg_stats/services/stats_service.dart';
 
 class _FakeStatsService extends StatsService {
   @override
-  Future<List<PlayerStats>> getPlayerStats() async {
+  Future<List<PlayerStats>> getPlayerStats({int sliceId = 1}) async {
     return const [
       PlayerStats(
         playerName: 'P1',
@@ -40,7 +40,7 @@ class _FakeStatsService extends StatsService {
   }
 
   @override
-  Future<List<DeckStats>> getDeckStats() async {
+  Future<List<DeckStats>> getDeckStats({int sliceId = 1}) async {
     return const [
       DeckStats(
         deckId: 1,

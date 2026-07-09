@@ -12,9 +12,9 @@ class GameService {
 
   final http.Client _client;
 
-  Future<List<Game>> getGames() async {
+  Future<List<Game>> getGames({int sliceId = 1}) async {
     final response = await _client.get(
-      Uri.parse('${ApiConfig.baseUrl}/api/games'),
+      Uri.parse('${ApiConfig.baseUrl}/api/games?slice_id=$sliceId'),
       headers: ApiConfig.authHeaders,
     );
     if (response.statusCode != 200) {
@@ -39,11 +39,14 @@ class GameService {
     return Game.fromJson(json.decode(response.body) as Map<String, dynamic>);
   }
 
-  Future<Game> createGame(Game game) async {
+  Future<Game> createGame(Game game, {int sliceId = 1}) async {
     final uri = Uri.parse('${ApiConfig.baseUrl}/api/games');
     final response = await _client.post(
       uri,
-      body: json.encode(game.toCreateRequest()),
+      body: json.encode({
+        ...game.toCreateRequest(),
+        'slice_id': sliceId,
+      }),
       headers: {...ApiConfig.authHeaders, 'Content-Type': 'application/json'},
     );
     if (response.statusCode != 201) {

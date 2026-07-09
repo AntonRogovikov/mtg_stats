@@ -10,6 +10,7 @@ import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/pages/deck_card_page.dart';
 import 'package:mtg_stats/pages/full_screen_image_page.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
+import 'package:mtg_stats/providers/slice_providers.dart';
 import 'package:mtg_stats/providers/stats_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/widgets/common/async_state_views.dart';
@@ -58,7 +59,8 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
   void initState() {
     super.initState();
     _initializeSecureRandom();
-    ref.listenManual(decksProvider, (_, next) {
+    // Внутри разреза показываем только колоды его пула (глобальный — все).
+    ref.listenManual(slicePoolDecksProvider, (_, next) {
       next.whenData(_syncDecksFromProvider);
     });
     ref.listenManual(statsDataProvider, (_, next) {
@@ -90,7 +92,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
     ref.invalidate(decksProvider);
     ref.invalidate(statsDataProvider);
     try {
-      await ref.read(decksProvider.future);
+      await ref.read(slicePoolDecksProvider.future);
     } catch (_) {
       if (mounted) {
         _showErrorSnack('Ошибка при загрузке списка колод');
@@ -471,8 +473,13 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final decksAsync = ref.watch(decksProvider);
+    final decksAsync = ref.watch(slicePoolDecksProvider);
     final statsAsync = ref.watch(statsDataProvider);
+    final currentSlice = ref.watch(currentSliceProvider);
+    // Создание колод — только в глобальном разрезе: новая колода не попала бы
+    // в пул текущего разреза и «исчезла» бы из списка сразу после создания.
+    final canCreateDecks =
+        ApiConfig.isAdmin && (currentSlice == null || currentSlice.isDefault);
     return Scaffold(
       appBar: AppBar(
         title: Text('Колоды', style: AppTheme.appBarTitle),
@@ -498,7 +505,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
           ),
         ],
       ),
-      floatingActionButton: ApiConfig.isAdmin
+      floatingActionButton: canCreateDecks
           ? FloatingActionButton(
               onPressed: _addDeckDialog,
               backgroundColor: Colors.deepPurple,

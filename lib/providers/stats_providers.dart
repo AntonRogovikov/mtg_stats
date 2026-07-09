@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/models/stats.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
+import 'package:mtg_stats/providers/slice_providers.dart';
 import 'package:mtg_stats/services/stats_service.dart';
 
 final statsServiceProvider = Provider<StatsService>((ref) {
@@ -19,9 +20,10 @@ class StatsData {
 
 final statsDataProvider = FutureProvider<StatsData>((ref) async {
   final statsService = ref.watch(statsServiceProvider);
+  final sliceId = ref.watch(currentSliceIdProvider);
   final results = await Future.wait([
-    statsService.getPlayerStats(),
-    statsService.getDeckStats(),
+    statsService.getPlayerStats(sliceId: sliceId),
+    statsService.getDeckStats(sliceId: sliceId),
   ]);
 
   final playerStats = List<PlayerStats>.from(results[0] as List<PlayerStats>)

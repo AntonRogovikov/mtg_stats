@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
 
 /// Кнопка на главном экране для перехода к разделу приложения.
+/// [color] — акцентный цвет (обычно цвет текущего разреза); по умолчанию синий.
 class HomeButton extends StatelessWidget {
   final String text;
   final IconData icon;
   final VoidCallback onPressed;
+  final Color? color;
 
   const HomeButton({
     super.key,
     required this.text,
     required this.icon,
     required this.onPressed,
+    this.color,
   });
 
   @override
   Widget build(BuildContext context) {
+    final baseColor = color ?? const Color(0xFF1565C0);
+    // Рамка — заметно темнее фона для читаемого контура на любом цвете.
+    final borderColor =
+        HSLColor.fromColor(baseColor).withLightness(0.25).toColor();
     return ElevatedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 28, color: Colors.white),
@@ -30,13 +37,13 @@ class HomeButton extends StatelessWidget {
       style: ElevatedButton.styleFrom(
         minimumSize: const Size(280, 65),
         padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-        backgroundColor: const Color(0xFF1565C0),
+        backgroundColor: baseColor,
         foregroundColor: Colors.white,
-        shadowColor: Color.fromRGBO(13, 71, 161, 0.5),
+        shadowColor: baseColor.withValues(alpha: 0.5),
         elevation: 6,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: Colors.blue[900]!, width: 2),
+          side: BorderSide(color: borderColor, width: 2),
         ),
       ),
     );

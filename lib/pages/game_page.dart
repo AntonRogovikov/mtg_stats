@@ -11,6 +11,7 @@ import 'package:mtg_stats/pages/active_game_page.dart';
 import 'package:mtg_stats/pages/deck_selection_page.dart';
 import 'package:mtg_stats/providers/active_game_provider.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
+import 'package:mtg_stats/providers/slice_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
 
 /// Настройка новой партии: команды, первый ход, колоды игроков.
@@ -186,7 +187,10 @@ class _GamePageState extends ConsumerState<GamePage> {
 
     try {
       final gameService = ref.read(gameServiceProvider);
-      final created = await gameService.createGame(stubGame);
+      final created = await gameService.createGame(
+        stubGame,
+        sliceId: ref.read(currentSliceIdProvider),
+      );
       if (!mounted) return;
       final activeNotifier = ref.read(activeGameControllerProvider.notifier);
       activeNotifier.setActiveGameFromApi(created);
@@ -259,7 +263,8 @@ class _GamePageState extends ConsumerState<GamePage> {
   @override
   Widget build(BuildContext context) {
     final usersAsync = ref.watch(usersProvider);
-    final decksAsync = ref.watch(decksProvider);
+    // Колоды ограничены пулом текущего разреза (глобальный — все колоды).
+    final decksAsync = ref.watch(slicePoolDecksProvider);
     final users = usersAsync.asData?.value ?? const <User>[];
     final allDecks = decksAsync.asData?.value ?? const <Deck>[];
     final isUsersLoading = usersAsync.isLoading;

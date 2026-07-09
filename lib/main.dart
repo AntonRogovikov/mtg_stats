@@ -7,12 +7,14 @@ import 'package:mtg_stats/pages/deck_detail_page.dart';
 import 'package:mtg_stats/pages/decks_page.dart';
 import 'package:mtg_stats/pages/game_page.dart';
 import 'package:mtg_stats/pages/games_history_page.dart';
-import 'package:mtg_stats/pages/home_page.dart';
 import 'package:mtg_stats/pages/change_password_page.dart';
 import 'package:mtg_stats/pages/public_game_page.dart';
 import 'package:mtg_stats/pages/settings_page.dart';
+import 'package:mtg_stats/pages/slice_picker_page.dart';
+import 'package:mtg_stats/pages/slices_manage_page.dart';
 import 'package:mtg_stats/pages/stats_page.dart';
 import 'package:mtg_stats/pages/users_page.dart';
+import 'package:mtg_stats/providers/slice_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/widgets/responsive_web_layout.dart';
 
@@ -30,11 +32,14 @@ void main() async {
 }
 
 /// Корневой виджет приложения: MaterialApp с named routes, AppTheme, ResponsiveWebLayout.
-class MyApp extends StatelessWidget {
+/// Тема подстраивается под цвет текущего разреза (SliceGate — точка входа).
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentSlice = ref.watch(currentSliceProvider);
+    AppTheme.setSliceColor(currentSlice?.themeColor);
     return MaterialApp(
       theme: ThemeData(
         appBarTheme: AppBarTheme(
@@ -48,8 +53,9 @@ class MyApp extends StatelessWidget {
         if (child == null) return const SizedBox.shrink();
         return ResponsiveWebLayout(child: child);
       },
-      home: const HomePage(),
+      home: const SliceGate(),
       routes: {
+        '/slices/manage': (context) => const SlicesManagePage(),
         '/decks': (context) => const DeckListPage(),
         '/games': (context) => const GamePage(),
         '/games/history': (context) => const GamesHistoryPage(),

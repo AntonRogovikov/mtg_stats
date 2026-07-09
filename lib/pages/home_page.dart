@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/pages/active_game_page.dart';
 import 'package:mtg_stats/providers/active_game_provider.dart';
+import 'package:mtg_stats/providers/slice_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/widgets/home_button.dart';
 
-/// Главная страница приложения: навигация к партиям, статистике и колодам.
+/// Главная страница разреза: навигация к партиям, статистике и колодам.
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
@@ -15,15 +16,28 @@ class HomePage extends ConsumerWidget {
     final hasActiveGame = ref.watch(
       activeGameControllerProvider.select((state) => state.hasActiveGame),
     );
+    final currentSlice = ref.watch(currentSliceProvider);
+    final sliceColor = currentSlice?.themeColor;
     return Scaffold(
       appBar: AppBar(
-        title: Text('MTG Статистика', style: AppTheme.appBarTitle),
+        title: Text(
+          currentSlice?.name ?? 'MTG Статистика',
+          style: AppTheme.appBarTitle,
+        ),
         backgroundColor: AppTheme.appBarBackground,
         foregroundColor: AppTheme.appBarForeground,
         elevation: 4,
         actions: [
           IconButton(
+            icon: const Icon(Icons.swap_horiz,
+                color: AppTheme.appBarForeground),
+            tooltip: 'Сменить разрез',
+            onPressed: () =>
+                ref.read(currentSliceProvider.notifier).clear(),
+          ),
+          IconButton(
             icon: const Icon(Icons.settings, color: AppTheme.appBarForeground),
+            tooltip: 'Настройки',
             onPressed: () => Navigator.pushNamed(context, '/settings'),
           ),
         ],
@@ -36,6 +50,7 @@ class HomePage extends ConsumerWidget {
               HomeButton(
                 text: 'ПАРТИИ',
                 icon: Icons.sports_esports,
+                color: sliceColor,
                 onPressed: () {
                   if (hasActiveGame) {
                     Navigator.of(context).push(
@@ -53,18 +68,21 @@ class HomePage extends ConsumerWidget {
             HomeButton(
               text: 'ИСТОРИЯ ПАРТИЙ',
               icon: Icons.history,
+              color: sliceColor,
               onPressed: () => Navigator.pushNamed(context, '/games/history'),
             ),
             const SizedBox(height: 20),
             HomeButton(
               text: 'СТАТИСТИКА',
               icon: Icons.bar_chart,
+              color: sliceColor,
               onPressed: () => Navigator.pushNamed(context, '/stats'),
             ),
             const SizedBox(height: 20),
             HomeButton(
               text: 'КОЛОДЫ',
               icon: Icons.import_contacts,
+              color: sliceColor,
               onPressed: () => Navigator.pushNamed(context, '/decks'),
             ),
           ],

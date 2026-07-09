@@ -10,9 +10,9 @@ class StatsService {
 
   final http.Client _client;
 
-  Future<List<PlayerStats>> getPlayerStats() async {
+  Future<List<PlayerStats>> getPlayerStats({int sliceId = 1}) async {
     final response = await _client.get(
-      Uri.parse('${ApiConfig.baseUrl}/api/stats/players'),
+      Uri.parse('${ApiConfig.baseUrl}/api/stats/players?slice_id=$sliceId'),
       headers: ApiConfig.authHeaders,
     );
     if (response.statusCode != 200) {
@@ -24,9 +24,9 @@ class StatsService {
         .toList();
   }
 
-  Future<List<DeckStats>> getDeckStats() async {
+  Future<List<DeckStats>> getDeckStats({int sliceId = 1}) async {
     final response = await _client.get(
-      Uri.parse('${ApiConfig.baseUrl}/api/stats/decks'),
+      Uri.parse('${ApiConfig.baseUrl}/api/stats/decks?slice_id=$sliceId'),
       headers: ApiConfig.authHeaders,
     );
     if (response.statusCode != 200) {
