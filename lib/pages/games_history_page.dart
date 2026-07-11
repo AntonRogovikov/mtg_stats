@@ -8,6 +8,7 @@ import 'package:mtg_stats/pages/deck_card_page.dart';
 import 'package:mtg_stats/pages/active_game_page.dart';
 import 'package:mtg_stats/providers/active_game_provider.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
+import 'package:mtg_stats/providers/slice_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/widgets/common/async_state_views.dart';
 
@@ -444,6 +445,11 @@ class GameDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // В сводном режиме «Все разрезы» история read-only — реванш недоступен.
+    final isAllSlices = ProviderScope.containerOf(context, listen: false)
+            .read(currentSliceProvider)
+            ?.isAll ??
+        false;
     final team1 =
         game.team1Name?.isNotEmpty == true ? game.team1Name! : 'Команда 1';
     final team2 =
@@ -466,7 +472,7 @@ class GameDetailPage extends StatelessWidget {
         backgroundColor: AppTheme.appBarBackground,
         foregroundColor: AppTheme.appBarForeground,
         actions: [
-          if (ApiConfig.isAdmin && game.endTime != null)
+          if (ApiConfig.isAdmin && game.endTime != null && !isAllSlices)
             PopupMenuButton<RematchMode>(
               icon: const Icon(Icons.replay),
               tooltip: 'Быстрый реванш',

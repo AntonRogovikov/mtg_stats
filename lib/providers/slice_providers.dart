@@ -25,6 +25,9 @@ class CurrentSliceNotifier extends Notifier<Slice?> {
 
   Future<void> select(Slice slice) async {
     state = slice;
+    // Псевдо-разрез «Все разрезы» не запоминаем: при перезапуске возвращаемся
+    // в последний реальный разрез, а не в сводный режим.
+    if (slice.isAll) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(prefsKey, slice.id);
@@ -48,6 +51,8 @@ class CurrentSliceNotifier extends Notifier<Slice?> {
   void refreshFrom(List<Slice> slices) {
     final current = state;
     if (current == null) return;
+    // Псевдо-разреза «Все разрезы» нет в списке с сервера — не сбрасываем его.
+    if (current.isAll) return;
     for (final s in slices) {
       if (s.id == current.id) {
         state = s;
@@ -84,7 +89,7 @@ final currentSliceIdProvider = Provider<int>((ref) {
 final slicePoolDecksProvider = FutureProvider<List<Deck>>((ref) async {
   final decks = await ref.watch(decksProvider.future);
   final slice = ref.watch(currentSliceProvider);
-  if (slice == null || slice.isDefault) return decks;
+  if (slice == null || slice.isDefault || slice.isAll) return decks;
   final pool = slice.deckIds.toSet();
   return decks.where((d) => pool.contains(d.id)).toList();
 });

@@ -6,6 +6,7 @@ import 'package:mtg_stats/pages/home_page.dart';
 import 'package:mtg_stats/providers/slice_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
 import 'package:mtg_stats/widgets/common/async_state_views.dart';
+import 'package:mtg_stats/widgets/home_button.dart';
 
 /// Корневой виджет: пока разрез не выбран — экран выбора, дальше — главная.
 /// При входе автоматически возвращает в последний выбранный разрез (localStorage).
@@ -23,7 +24,9 @@ class SliceGate extends ConsumerWidget {
     });
 
     final current = ref.watch(currentSliceProvider);
-    if (current != null) {
+    // Псевдо-разрез «Все разрезы» не открывает HomePage: остаёмся на экране
+    // выбора, откуда кнопки ведут в сводную историю/статистику по всем играм.
+    if (current != null && !current.isAll) {
       return const HomePage();
     }
 
@@ -48,7 +51,9 @@ class SliceGate extends ConsumerWidget {
 
     final slices = slicesAsync.asData?.value ?? const <Slice>[];
     final savedId = savedAsync.asData?.value;
-    if (savedId != null) {
+    // Авто-вход только из «чистого» состояния (разрез не выбран). Если уже в
+    // режиме «Все разрезы» (current != null), не выкидываем из него.
+    if (current == null && savedId != null) {
       Slice? match;
       for (final s in slices) {
         if (s.id == savedId) {
@@ -128,18 +133,43 @@ class SlicePickerPage extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'Выберите разрез — в нём будут свои игры и своя статистика.',
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-              ),
+              const _AllGamesButtons(),
+              const Divider(height: 28),
               ...slices.map((s) => _SliceCard(slice: s)),
             ],
           );
         },
       ),
+    );
+  }
+}
+
+/// Кнопки сводного режима «по всем играм»: история и статистика по всем разрезам.
+class _AllGamesButtons extends ConsumerWidget {
+  const _AllGamesButtons();
+
+  /// Включает псевдо-разрез «Все разрезы» и открывает нужный экран.
+  void _open(BuildContext context, WidgetRef ref, String route) {
+    ref.read(currentSliceProvider.notifier).select(Slice.all());
+    Navigator.pushNamed(context, route);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      children: [
+        HomeButton(
+          text: 'ИСТОРИЯ ИГР',
+          icon: Icons.history,
+          onPressed: () => _open(context, ref, '/games/history'),
+        ),
+        const SizedBox(height: 20),
+        HomeButton(
+          text: 'СТАТИСТИКА',
+          icon: Icons.bar_chart,
+          onPressed: () => _open(context, ref, '/stats'),
+        ),
+      ],
     );
   }
 }
