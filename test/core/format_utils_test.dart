@@ -37,4 +37,28 @@ void main() {
       expect(value, '2 мин. 8 сек.');
     });
   });
+
+  group('FormatUtils.formatDateRu', () {
+    test('форматирует дату как «день месяц год»', () {
+      expect(FormatUtils.formatDateRu(DateTime(2026, 7, 9)), '9 июл 2026');
+      expect(FormatUtils.formatDateRu(DateTime(2026, 1, 31)), '31 янв 2026');
+      expect(FormatUtils.formatDateRu(DateTime(2025, 12, 1)), '1 дек 2025');
+    });
+  });
+
+  group('FormatUtils.daysAgoRu', () {
+    test('сегодня и вчера', () {
+      expect(FormatUtils.daysAgoRu(0), 'сегодня');
+      expect(FormatUtils.daysAgoRu(-5), 'сегодня');
+      expect(FormatUtils.daysAgoRu(1), 'вчера');
+    });
+
+    test('склонение слова «день»', () {
+      expect(FormatUtils.daysAgoRu(2), '2 дня назад');
+      expect(FormatUtils.daysAgoRu(5), '5 дней назад');
+      expect(FormatUtils.daysAgoRu(11), '11 дней назад');
+      expect(FormatUtils.daysAgoRu(21), '21 день назад');
+      expect(FormatUtils.daysAgoRu(22), '22 дня назад');
+    });
+  });
 }

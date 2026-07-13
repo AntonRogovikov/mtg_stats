@@ -57,4 +57,40 @@ abstract class FormatUtils {
     if (min == 0) return '$totalSec ${secWord(totalSec)}';
     return '$min ${minWord(min)}';
   }
+
+  static const _shortMonthsRu = [
+    'янв',
+    'фев',
+    'мар',
+    'апр',
+    'мая',
+    'июн',
+    'июл',
+    'авг',
+    'сен',
+    'окт',
+    'ноя',
+    'дек',
+  ];
+
+  /// Форматирует дату в вид «9 июл 2026».
+  static String formatDateRu(DateTime date) {
+    return '${date.day} ${_shortMonthsRu[date.month - 1]} ${date.year}';
+  }
+
+  /// Склонение слова «день» по числу: 1 день, 2 дня, 5 дней.
+  static String dayWord(int n) {
+    final mod10 = n % 10;
+    final mod100 = n % 100;
+    if (mod10 == 1 && mod100 != 11) return 'день';
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'дня';
+    return 'дней';
+  }
+
+  /// Человекочитаемая давность в днях: «сегодня», «вчера», «N дней назад».
+  static String daysAgoRu(int days) {
+    if (days <= 0) return 'сегодня';
+    if (days == 1) return 'вчера';
+    return '$days ${dayWord(days)} назад';
+  }
 }

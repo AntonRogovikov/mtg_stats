@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/core/constants.dart';
+import 'package:mtg_stats/core/deck_history.dart';
+import 'package:mtg_stats/core/format_utils.dart';
+import 'package:mtg_stats/core/timezone_utils.dart';
 import 'package:mtg_stats/core/ui_feedback.dart';
 import 'package:mtg_stats/models/deck.dart';
+import 'package:mtg_stats/models/game.dart';
+import 'package:mtg_stats/models/stats.dart';
+import 'package:mtg_stats/pages/deck_games_page.dart';
 import 'package:mtg_stats/pages/full_screen_image_page.dart';
+import 'package:mtg_stats/providers/service_providers.dart';
+import 'package:mtg_stats/providers/stats_providers.dart';
 import 'package:mtg_stats/services/deck_image/deck_image_provider.dart';
 import 'package:mtg_stats/services/deck_image/deck_image_service.dart';
 import 'package:mtg_stats/services/deck_service.dart';
 
 /// Экран редактирования колоды: название, загрузка и удаление изображения.
 /// При readOnly=true — только просмотр (без редактирования).
-class DeckCardPage extends StatefulWidget {
+class DeckCardPage extends ConsumerStatefulWidget {
   final Deck deck;
   final DeckService deckService;
   final bool readOnly;
@@ -23,10 +32,10 @@ class DeckCardPage extends StatefulWidget {
   });
 
   @override
-  State<DeckCardPage> createState() => _DeckCardPageState();
+  ConsumerState<DeckCardPage> createState() => _DeckCardPageState();
 }
 
-class _DeckCardPageState extends State<DeckCardPage> {
+class _DeckCardPageState extends ConsumerState<DeckCardPage> {
   late TextEditingController _nameController;
   late Deck _deck;
   bool _isSaving = false;
@@ -309,10 +318,162 @@ class _DeckCardPageState extends State<DeckCardPage> {
               textInputAction: readOnly ? null : TextInputAction.done,
               onSubmitted: readOnly ? null : (_) => _save(),
             ),
+            const SizedBox(height: 24),
+            _buildStatsSection(),
           ],
         ),
       ),
       ),
+    );
+  }
+
+  Widget _buildStatsSection() {
+    final statsData = ref.watch(statsDataProvider).asData?.value;
+    final tzOffset = ref.watch(currentTimezoneOffsetProvider);
+    final games = ref.watch(gamesHistoryProvider).asData?.value ?? const <Game>[];
+
+    DeckStats? deckStats;
+    if (statsData != null) {
+      for (final stat in statsData.deckStats) {
+        if (stat.deckId == _deck.id) {
+          deckStats = stat;
+          break;
+        }
+      }
+    }
+
+    final deckGames = gamesForDeck(games, _deck.id);
+    final gamesCount = deckStats?.gamesCount ?? deckGames.length;
+    final winsCount = deckStats?.winsCount ?? 0;
+    final winPercent = deckStats?.winPercent ?? 0;
+
+    final firstDate = firstPlayedDate(deckGames);
+    final lastDate = lastPlayedDate(deckGames);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Статистика колоды',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.blueGrey[800],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _statTile(Icons.casino, 'Игр', '$gamesCount', Colors.deepPurple),
+              _statTile(
+                  Icons.emoji_events, 'Побед', '$winsCount', Colors.amber[800]!),
+              _statTile(Icons.percent, 'Винрейт',
+                  '${winPercent.toStringAsFixed(0)}%', Colors.green[700]!),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _dateRow(Icons.schedule, 'Последняя игра', lastDate, tzOffset,
+              showDaysAgo: true),
+          const SizedBox(height: 8),
+          _dateRow(Icons.event, 'Первая игра', firstDate, tzOffset),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: deckGames.isEmpty
+                  ? null
+                  : () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DeckGamesPage(
+                            deckId: _deck.id,
+                            deckName: _deck.name,
+                          ),
+                        ),
+                      ),
+              icon: const Icon(Icons.history_edu),
+              label: Text('Игры этой колоды (${deckGames.length})'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueGrey[700],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statTile(IconData icon, String label, String value, Color color) {
+    return Expanded(
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 26),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dateRow(
+    IconData icon,
+    String label,
+    DateTime? date,
+    int tzOffset, {
+    bool showDaysAgo = false,
+  }) {
+    String valueText;
+    if (date == null) {
+      valueText = '—';
+    } else {
+      final local = TimezoneUtils.toConfiguredTimezone(
+        date,
+        timezoneOffsetMinutes: tzOffset,
+      );
+      valueText = FormatUtils.formatDateRu(local);
+      if (showDaysAgo) {
+        final today = DateTime.now();
+        final days = DateTime(today.year, today.month, today.day)
+            .difference(DateTime(local.year, local.month, local.day))
+            .inDays;
+        valueText += ' (${FormatUtils.daysAgoRu(days)})';
+      }
+    }
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Colors.blueGrey[600]),
+        const SizedBox(width: 8),
+        Text('$label: ', style: TextStyle(color: Colors.grey[700])),
+        Expanded(
+          child: Text(
+            valueText,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
     );
   }
 }
