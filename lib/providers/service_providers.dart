@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
+import 'package:mtg_stats/core/deck_draw.dart';
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/models/user.dart';
@@ -72,6 +73,13 @@ final gamesHistoryProvider = FutureProvider<List<Game>>((ref) async {
     return b.startTime.compareTo(a.startTime);
   });
   return games;
+});
+
+/// Давность последней игры каждой колоды (в днях от последней сыгранной игры).
+/// Используется автовыбором колоды для усиления веса «забытых» колод.
+final deckRecencyDaysProvider = FutureProvider<Map<int, int>>((ref) async {
+  final games = await ref.watch(gamesHistoryProvider.future);
+  return daysSinceLastPlayedByDeck(games);
 });
 
 final currentTimezoneOffsetProvider = Provider<int>((ref) {

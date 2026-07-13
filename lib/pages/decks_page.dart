@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
 import 'package:mtg_stats/core/constants.dart';
+import 'package:mtg_stats/core/deck_draw.dart';
 import 'package:mtg_stats/core/ui_feedback.dart';
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/pages/deck_card_page.dart';
@@ -29,6 +30,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
   int? _selectedDeckIndex;
   String _providerDecksSignature = '';
   Map<int, int> _gamesByDeckId = {};
+  Map<int, int> _daysSinceByDeckId = {};
   Map<int, double> _deckChancePercentById = {};
   String _searchQuery = '';
 
@@ -65,6 +67,9 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
     });
     ref.listenManual(statsDataProvider, (_, next) {
       next.whenData(_syncDeckStatsFromProvider);
+    });
+    ref.listenManual(deckRecencyDaysProvider, (_, next) {
+      next.whenData(_syncRecencyFromProvider);
     });
   }
 
@@ -125,6 +130,17 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
     if (!hasGamesMapChanged) return;
     setState(() {
       _gamesByDeckId = nextGamesByDeckId;
+      _recomputeDeckChanceMap();
+    });
+  }
+
+  void _syncRecencyFromProvider(Map<int, int> daysByDeckId) {
+    final hasChanged = daysByDeckId.length != _daysSinceByDeckId.length ||
+        daysByDeckId.entries
+            .any((entry) => _daysSinceByDeckId[entry.key] != entry.value);
+    if (!hasChanged) return;
+    setState(() {
+      _daysSinceByDeckId = daysByDeckId;
       _recomputeDeckChanceMap();
     });
   }
@@ -289,35 +305,31 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
 
   void _performFinalRoll() {
     Future.delayed(Duration(milliseconds: 50), () {
-      if (_secureRandom != null) {
-        setState(() {
-          _firstDiceValue = _secureRandom!.nextInt(20) + 1;
-        });
-
-        Future.delayed(Duration(milliseconds: 30), () {
-          setState(() {
-            _secondDiceValue = _secureRandom!.nextInt(20) + 1;
-            _isRolling = false;
-            _selectDeckByWeight();
-          });
-        });
-      } else {
-        setState(() {
-          _firstDiceValue = _fastRandom.nextInt(20) + 1;
-          _secondDiceValue = _fastRandom.nextInt(20) + 1;
-          _isRolling = false;
-          _selectDeckByWeight();
-        });
+      if (!mounted) return;
+      if (decks.isEmpty) {
+        setState(() => _isRolling = false);
+        return;
       }
+      // Сначала вес по истории игр выбирает колоду, затем под неё
+      // подгоняем сумму на кубиках (по той же считалочке, что и ручной ввод).
+      final index = _pickDeckIndexByWeight()!;
+      final rnd = _secureRandom ?? _fastRandom;
+      final sum = sumForPosition(index + 1, decks.length, rnd);
+      final dice = diceForSum(sum, rnd);
+      setState(() => _firstDiceValue = dice[0]);
+      Future.delayed(Duration(milliseconds: 30), () {
+        if (!mounted) return;
+        setState(() {
+          _secondDiceValue = dice[1];
+          _isRolling = false;
+          _selectedDeckIndex = index;
+        });
+      });
     });
   }
 
-  double _deckWeight(Deck deck) {
-    const minWeight = 0.15;
-    final gamesCount = _gamesByDeckId[deck.id] ?? 0;
-    final weight = 1 / (1 + gamesCount);
-    return weight < minWeight ? minWeight : weight;
-  }
+  double _deckWeight(Deck deck) =>
+      deckDrawWeight(_gamesByDeckId[deck.id] ?? 0, _daysSinceByDeckId[deck.id]);
 
   double _totalDeckWeight() {
     if (decks.isEmpty) return 0;
@@ -347,25 +359,10 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
 
   int? _pickDeckIndexByWeight() {
     if (decks.isEmpty) return null;
-    final totalWeight = decks.fold<double>(
-      0,
-      (sum, deck) => sum + _deckWeight(deck),
-    );
-    if (totalWeight <= 0) return _fastRandom.nextInt(decks.length);
-
-    final rnd = _secureRandom ?? _fastRandom;
-    var threshold = rnd.nextDouble() * totalWeight;
-    for (var i = 0; i < decks.length; i++) {
-      threshold -= _deckWeight(decks[i]);
-      if (threshold <= 0) return i;
-    }
-    return decks.length - 1;
-  }
-
-  void _selectDeckByWeight() {
-    final index = _pickDeckIndexByWeight();
-    if (index == null) return;
-    _selectedDeckIndex = index;
+    final weights =
+        decks.map((deck) => _deckWeight(deck)).toList(growable: false);
+    final index = pickIndexByWeight(weights, _secureRandom ?? _fastRandom);
+    return index < 0 ? null : index;
   }
 
   void _manualSumInput() {
@@ -452,29 +449,25 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
 
   void _processManualInput() {
     final text = _manualSumController.text;
-    if (text.isNotEmpty) {
-      try {
-        final sum = int.parse(text);
-        if (sum >= 2 && sum <= 40) {
-          setState(() {
-            _firstDiceValue = min(20, sum ~/ 2);
-            _secondDiceValue = sum - _firstDiceValue;
-            if (_secondDiceValue > 20) {
-              _secondDiceValue = 20;
-              _firstDiceValue = sum - 20;
-            }
-            _selectedDeckIndex = null;
-            _selectDeckByWeight();
-          });
-        }
-      } catch (_) {}
-    }
+    if (text.isEmpty) return;
+    final sum = int.tryParse(text);
+    if (sum == null || sum < 2 || sum > 40) return;
+    if (decks.isEmpty) return;
+    // Введённая сумма напрямую определяет колоду по кругу — без учёта веса.
+    final k = positionFromSum(sum, decks.length);
+    final dice = diceForSum(sum, _secureRandom ?? _fastRandom);
+    setState(() {
+      _firstDiceValue = dice[0];
+      _secondDiceValue = dice[1];
+      _selectedDeckIndex = k - 1;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final decksAsync = ref.watch(slicePoolDecksProvider);
     final statsAsync = ref.watch(statsDataProvider);
+    final recencyAsync = ref.watch(deckRecencyDaysProvider);
     final currentSlice = ref.watch(currentSliceProvider);
     // Создание колод — только в глобальном разрезе: новая колода не попала бы
     // в пул текущего разреза и «исчезла» бы из списка сразу после создания.
@@ -525,6 +518,10 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
           final statsData = statsAsync.asData?.value;
           if (statsData != null && _gamesByDeckId.isEmpty) {
             _syncDeckStatsFromProvider(statsData);
+          }
+          final recencyData = recencyAsync.asData?.value;
+          if (recencyData != null && _daysSinceByDeckId.isEmpty) {
+            _syncRecencyFromProvider(recencyData);
           }
           final filteredDecks = _filteredDecks;
 

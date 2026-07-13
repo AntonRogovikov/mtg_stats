@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mtg_stats/core/app_theme.dart';
+import 'package:mtg_stats/core/deck_draw.dart';
 import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/models/stats.dart';
 import 'package:mtg_stats/models/user.dart';
@@ -103,6 +104,7 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
           playerStats: [],
           deckStats: [],
         ));
+    ref.read(deckRecencyDaysProvider.future).catchError((_) => <int, int>{});
   }
 
   @override
@@ -160,51 +162,32 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
     return 0;
   }
 
-  double _deckWeightFromHistory(Deck deck) {
-    const minWeight = 0.15;
-    final gamesCount = _gamesCountForDeck(deck);
-    final weight = 1 / (1 + gamesCount);
-    return weight < minWeight ? minWeight : weight;
-  }
-
   Deck? _pickDeckByHistoryWeight(List<Deck> availableDecks) {
     if (availableDecks.isEmpty) return null;
-    final totalWeight = availableDecks.fold<double>(
-      0,
-      (sum, deck) => sum + _deckWeightFromHistory(deck),
-    );
-    if (totalWeight <= 0) {
-      return availableDecks[_fastRandom.nextInt(availableDecks.length)];
-    }
-    final rnd = _secureRandom ?? _fastRandom;
-    var threshold = rnd.nextDouble() * totalWeight;
-    for (final deck in availableDecks) {
-      threshold -= _deckWeightFromHistory(deck);
-      if (threshold <= 0) return deck;
-    }
-    return availableDecks.last;
+    final days = ref.read(deckRecencyDaysProvider).asData?.value ??
+        const <int, int>{};
+    final weights = availableDecks
+        .map((deck) => deckDrawWeight(_gamesCountForDeck(deck), days[deck.id]))
+        .toList(growable: false);
+    final index = pickIndexByWeight(weights, _secureRandom ?? _fastRandom);
+    return index < 0 ? null : availableDecks[index];
   }
 
-  void _selectDeckByHistoryWeight(User user) {
-    if (_deckOrder.isEmpty) return;
+  /// Колоды, ещё не занятые другими игроками, в текущем порядке списка.
+  List<Deck> _availableDecksFor(User user) {
     final takenDeckIds = _userDecks.entries
         .where((e) => e.key != user.id)
         .map((e) => e.value.id)
         .toSet();
-
-    final availableDecks = _deckOrder
+    return _deckOrder
         .where((deck) => !takenDeckIds.contains(deck.id))
         .toList(growable: false);
-    final deckToAssign = _pickDeckByHistoryWeight(availableDecks);
+  }
 
-    if (deckToAssign == null) {
-      _showWarning(
-          'Все колоды уже выбраны. Освободите колоду или добавьте новую.');
-      return;
-    }
-
+  /// Назначает колоду игроку и продвигает очередь в авто-режиме.
+  void _assignDeck(User user, Deck deck) {
     setState(() {
-      _userDecks[user.id] = deckToAssign;
+      _userDecks[user.id] = deck;
       if (_isAutoMode) {
         if (_currentPlayerIndex >= _playerOrder.length - 1) {
           _autoSelectionStarted = false;
@@ -243,27 +226,29 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
   void _performFinalRollForDeck(User user) {
     Future.delayed(const Duration(milliseconds: 50), () {
       if (!mounted) return;
-      if (_secureRandom != null) {
+      final available = _availableDecksFor(user);
+      if (available.isEmpty) {
+        setState(() => _isRolling = false);
+        _showWarning(
+            'Все колоды уже выбраны. Освободите колоду или добавьте новую.');
+        return;
+      }
+      // Сначала вес по истории игр выбирает колоду, затем под неё
+      // подгоняем сумму на кубиках (по той же считалочке, что и ручной ввод).
+      final deck = _pickDeckByHistoryWeight(available)!;
+      final k = available.indexOf(deck) + 1;
+      final rnd = _secureRandom ?? _fastRandom;
+      final sum = sumForPosition(k, available.length, rnd);
+      final dice = diceForSum(sum, rnd);
+      setState(() => _firstDiceValue = dice[0]);
+      Future.delayed(const Duration(milliseconds: 30), () {
+        if (!mounted) return;
         setState(() {
-          _firstDiceValue = _secureRandom!.nextInt(20) + 1;
-        });
-
-        Future.delayed(const Duration(milliseconds: 30), () {
-          if (!mounted) return;
-          setState(() {
-            _secondDiceValue = _secureRandom!.nextInt(20) + 1;
-            _isRolling = false;
-          });
-          _selectDeckByHistoryWeight(user);
-        });
-      } else {
-        setState(() {
-          _firstDiceValue = _fastRandom.nextInt(20) + 1;
-          _secondDiceValue = _fastRandom.nextInt(20) + 1;
+          _secondDiceValue = dice[1];
           _isRolling = false;
         });
-        _selectDeckByHistoryWeight(user);
-      }
+        _assignDeck(user, deck);
+      });
     });
   }
 
@@ -355,15 +340,21 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
   }
 
   void _processManualSum(User user, int sum) {
+    final available = _availableDecksFor(user);
+    if (available.isEmpty) {
+      _showWarning(
+          'Все колоды уже выбраны. Освободите колоду или добавьте новую.');
+      return;
+    }
+    // Введённая сумма напрямую определяет колоду по кругу — без учёта веса.
+    final k = positionFromSum(sum, available.length);
+    final deck = available[k - 1];
+    final dice = diceForSum(sum, _secureRandom ?? _fastRandom);
     setState(() {
-      _firstDiceValue = min(20, sum ~/ 2);
-      _secondDiceValue = sum - _firstDiceValue;
-      if (_secondDiceValue > 20) {
-        _secondDiceValue = 20;
-        _firstDiceValue = sum - 20;
-      }
+      _firstDiceValue = dice[0];
+      _secondDiceValue = dice[1];
     });
-    _selectDeckByHistoryWeight(user);
+    _assignDeck(user, deck);
   }
 
   void _openDeckPicker(User user) {
@@ -386,18 +377,7 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
           disabledDeckIds: disabledDeckIds,
           disabledDeckIdToPlayerName: disabledDeckIdToPlayerName,
           selectedDeck: _userDecks[user.id],
-          onDeckSelected: (deck) {
-            setState(() {
-              _userDecks[user.id] = deck;
-              if (_isAutoMode) {
-                if (_currentPlayerIndex >= _playerOrder.length - 1) {
-                  _autoSelectionStarted = false;
-                } else {
-                  _currentPlayerIndex++;
-                }
-              }
-            });
-          },
+          onDeckSelected: (deck) => _assignDeck(user, deck),
         ),
       ),
     );
