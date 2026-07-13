@@ -85,7 +85,7 @@ class SlicePickerPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Выбор разреза', style: AppTheme.appBarTitle),
+        title: Text('MTG Статистика', style: AppTheme.appBarTitle),
         backgroundColor: AppTheme.appBarBackground,
         foregroundColor: AppTheme.appBarForeground,
         elevation: 4,
@@ -144,7 +144,8 @@ class SlicePickerPage extends ConsumerWidget {
   }
 }
 
-/// Кнопки сводного режима «по всем играм»: история и статистика по всем разрезам.
+/// Кнопки сводного режима «по всем играм»: история, статистика и колоды по
+/// всем разрезам сразу.
 class _AllGamesButtons extends ConsumerWidget {
   const _AllGamesButtons();
 
@@ -168,6 +169,12 @@ class _AllGamesButtons extends ConsumerWidget {
           text: 'СТАТИСТИКА',
           icon: Icons.bar_chart,
           onPressed: () => _open(context, ref, '/stats'),
+        ),
+        const SizedBox(height: 20),
+        HomeButton(
+          text: 'КОЛОДЫ',
+          icon: Icons.import_contacts,
+          onPressed: () => _open(context, ref, '/decks'),
         ),
       ],
     );

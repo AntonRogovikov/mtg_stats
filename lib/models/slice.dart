@@ -13,6 +13,9 @@ class Slice {
   final String color;
   final bool isDefault;
   final List<int> deckIds;
+
+  /// Колоды пула, по которым в разрезе уже есть игры — их нельзя убрать из пула.
+  final List<int> usedDeckIds;
   final List<int> playerIds;
   final int gamesCount;
 
@@ -26,6 +29,7 @@ class Slice {
     this.color = '',
     this.isDefault = false,
     this.deckIds = const [],
+    this.usedDeckIds = const [],
     this.playerIds = const [],
     this.gamesCount = 0,
     this.isAll = false,
@@ -53,6 +57,10 @@ class Slice {
       color: json['color'] as String? ?? '',
       isDefault: json['is_default'] as bool? ?? false,
       deckIds: (json['deck_ids'] as List<dynamic>?)
+              ?.map((e) => (e as num).toInt())
+              .toList() ??
+          const [],
+      usedDeckIds: (json['used_deck_ids'] as List<dynamic>?)
               ?.map((e) => (e as num).toInt())
               .toList() ??
           const [],

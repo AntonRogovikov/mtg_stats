@@ -192,9 +192,9 @@ class _SliceEditPageState extends ConsumerState<SliceEditPage> {
   bool get _isEdit => widget.slice != null;
   bool get _isDefault => widget.slice?.isDefault ?? false;
 
-  /// Пул сформированного разреза заморожен: есть игры — состав колод не меняется.
-  bool get _poolLocked =>
-      !_isDefault && (widget.slice?.gamesCount ?? 0) > 0;
+  /// Колоды, по которым в разрезе уже есть игры: их нельзя убрать из пула
+  /// (добавлять новые колоды можно свободно).
+  Set<int> get _lockedDeckIds => {...?widget.slice?.usedDeckIds};
 
   @override
   void initState() {
@@ -380,7 +380,7 @@ class _SliceEditPageState extends ConsumerState<SliceEditPage> {
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: Text(
-                  'Пул колод глобального разреза не ограничен: в нём всегда доступны все колоды, включая новые.',
+                  'Пул колод основного разреза не ограничен: в нём всегда доступны все колоды, включая новые.',
                   style: TextStyle(color: Colors.grey),
                 ),
               ),
@@ -412,7 +412,7 @@ class _SliceEditPageState extends ConsumerState<SliceEditPage> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    if (_poolLocked) ...[
+                    if (_lockedDeckIds.isNotEmpty) ...[
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
@@ -427,9 +427,8 @@ class _SliceEditPageState extends ConsumerState<SliceEditPage> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Пул заморожен: в разрезе уже есть игры '
-                                '(${widget.slice!.gamesCount}). '
-                                'Менять можно только название и цвет.',
+                                'Колоды с играми (🔒) убрать из разреза нельзя. '
+                                'Добавлять новые колоды можно свободно.',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.orange.shade900,
@@ -452,25 +451,33 @@ class _SliceEditPageState extends ConsumerState<SliceEditPage> {
                         final sorted = [...decks]
                           ..sort((a, b) => a.name.compareTo(b.name));
                         return Column(
-                          children: sorted
-                              .map((d) => CheckboxListTile(
-                                    dense: true,
-                                    contentPadding: EdgeInsets.zero,
-                                    controlAffinity:
-                                        ListTileControlAffinity.leading,
-                                    title: Text(d.name),
-                                    value: _selectedDeckIds.contains(d.id),
-                                    onChanged: _poolLocked
-                                        ? null
-                                        : (checked) => setState(() {
-                                              if (checked == true) {
-                                                _selectedDeckIds.add(d.id);
-                                              } else {
-                                                _selectedDeckIds.remove(d.id);
-                                              }
-                                            }),
-                                  ))
-                              .toList(),
+                          children: sorted.map((d) {
+                            final isSelected = _selectedDeckIds.contains(d.id);
+                            // Блокируем снятие только для колод, что и в пуле, и с играми.
+                            final isLocked =
+                                isSelected && _lockedDeckIds.contains(d.id);
+                            return CheckboxListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              title: Text(d.name),
+                              secondary: isLocked
+                                  ? Icon(Icons.lock_outline,
+                                      size: 18, color: Colors.orange.shade700)
+                                  : null,
+                              value: isSelected,
+                              // Колоду с играми снять нельзя; добавлять — свободно.
+                              onChanged: isLocked
+                                  ? null
+                                  : (checked) => setState(() {
+                                        if (checked == true) {
+                                          _selectedDeckIds.add(d.id);
+                                        } else {
+                                          _selectedDeckIds.remove(d.id);
+                                        }
+                                      }),
+                            );
+                          }).toList(),
                         );
                       },
                     ),
