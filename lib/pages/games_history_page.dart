@@ -290,7 +290,7 @@ class _GamesHistoryPageState extends ConsumerState<GamesHistoryPage> {
     required AsyncValue<List<Game>> gamesAsync,
     required int timezoneOffsetMinutes,
   }) {
-    if (gamesAsync.isLoading) {
+    if (gamesAsync.isLoading && !gamesAsync.hasError) {
       return const AsyncLoadingView();
     }
     if (gamesAsync.hasError) {

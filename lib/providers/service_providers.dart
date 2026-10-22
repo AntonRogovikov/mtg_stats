@@ -5,6 +5,7 @@ import 'package:mtg_stats/models/deck.dart';
 import 'package:mtg_stats/models/game.dart';
 import 'package:mtg_stats/models/user.dart';
 import 'package:mtg_stats/providers/slice_providers.dart';
+import 'package:mtg_stats/services/auth_http_client.dart';
 import 'package:mtg_stats/services/auth_service.dart';
 import 'package:mtg_stats/services/app_settings_service.dart';
 import 'package:mtg_stats/services/deck_service.dart';
@@ -14,7 +15,7 @@ import 'package:mtg_stats/services/maintenance_service.dart';
 import 'package:mtg_stats/services/user_service.dart';
 
 final httpClientProvider = Provider<http.Client>((ref) {
-  final client = http.Client();
+  final client = AuthHttpClient();
   ref.onDispose(client.close);
   return client;
 });

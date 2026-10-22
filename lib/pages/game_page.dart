@@ -267,9 +267,11 @@ class _GamePageState extends ConsumerState<GamePage> {
     final decksAsync = ref.watch(slicePoolDecksProvider);
     final users = usersAsync.asData?.value ?? const <User>[];
     final allDecks = decksAsync.asData?.value ?? const <Deck>[];
-    final isUsersLoading = usersAsync.isLoading;
+    // Riverpod 3 ретраит упавшие провайдеры: во время ретрая isLoading и hasError
+    // оба true. Ошибку показываем сразу, иначе спиннер крутится бесконечно.
+    final isUsersLoading = usersAsync.isLoading && !usersAsync.hasError;
     final isUsersError = usersAsync.hasError;
-    final isDecksLoading = decksAsync.isLoading;
+    final isDecksLoading = decksAsync.isLoading && !decksAsync.hasError;
     final isDecksError = decksAsync.hasError;
 
     if (!ApiConfig.isAdmin) {

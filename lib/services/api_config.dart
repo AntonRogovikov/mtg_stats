@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const String _baseUrlFromEnvironment =
@@ -109,6 +110,15 @@ class ApiConfig {
         await prefs.remove(_keyUserName);
         await prefs.remove(_keyUserAdmin);
     } catch (_) {}
+  }
+
+  /// Счетчик истечений сессии: растет, когда сервер отверг JWT (401). Слушает MyApp.
+  static final ValueNotifier<int> sessionExpired = ValueNotifier(0);
+
+  /// Сбрасывает JWT и уведомляет UI, что нужно войти заново.
+  static Future<void> expireSession() async {
+    await clearJwt();
+    sessionExpired.value++;
   }
 
   static Future<void> setBaseUrl(String url) async {

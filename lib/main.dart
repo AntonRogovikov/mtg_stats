@@ -16,6 +16,7 @@ import 'package:mtg_stats/pages/stats_page.dart';
 import 'package:mtg_stats/pages/users_page.dart';
 import 'package:mtg_stats/providers/slice_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
+import 'package:mtg_stats/services/auth_http_client.dart';
 import 'package:mtg_stats/widgets/responsive_web_layout.dart';
 
 void main() async {
@@ -26,6 +27,7 @@ void main() async {
   await ApiConfig.load();
   runApp(
     const ProviderScope(
+      retry: apiProviderRetry,
       child: MyApp(),
     ),
   );
@@ -33,14 +35,55 @@ void main() async {
 
 /// Корневой виджет приложения: MaterialApp с named routes, AppTheme, ResponsiveWebLayout.
 /// Тема подстраивается под цвет текущего разреза (SliceGate — точка входа).
-class MyApp extends ConsumerWidget {
+/// Слушает ApiConfig.sessionExpired и предлагает войти заново.
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends ConsumerState<MyApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+
+  @override
+  void initState() {
+    super.initState();
+    ApiConfig.sessionExpired.addListener(_onSessionExpired);
+  }
+
+  @override
+  void dispose() {
+    ApiConfig.sessionExpired.removeListener(_onSessionExpired);
+    super.dispose();
+  }
+
+  void _onSessionExpired() {
+    final messenger = _messengerKey.currentState;
+    if (messenger == null) return;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Сессия истекла. Войдите снова.'),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 10),
+        action: SnackBarAction(
+          label: 'Войти',
+          textColor: Colors.white,
+          onPressed: () => _navigatorKey.currentState?.pushNamed('/settings'),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final currentSlice = ref.watch(currentSliceProvider);
     AppTheme.setSliceColor(currentSlice?.themeColor);
     return MaterialApp(
+      navigatorKey: _navigatorKey,
+      scaffoldMessengerKey: _messengerKey,
       theme: ThemeData(
         appBarTheme: AppBarTheme(
           backgroundColor: AppTheme.appBarBackground,

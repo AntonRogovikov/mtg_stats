@@ -32,7 +32,8 @@ class SliceGate extends ConsumerWidget {
 
     final slicesAsync = ref.watch(slicesProvider);
     final savedAsync = ref.watch(savedSliceIdProvider);
-    if (slicesAsync.isLoading || savedAsync.isLoading) {
+    if ((slicesAsync.isLoading && !slicesAsync.hasError) ||
+        savedAsync.isLoading) {
       return const Scaffold(body: AsyncLoadingView());
     }
     if (slicesAsync.hasError) {
