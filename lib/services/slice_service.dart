@@ -47,6 +47,18 @@ class SliceService {
     return Slice.fromJson(json.decode(response.body) as Map<String, dynamic>);
   }
 
+  Future<Slice> setExcludeFromDraw(int sliceId, int deckId, bool exclude) async {
+    final response = await _client.put(
+      Uri.parse('${ApiConfig.baseUrl}/api/slices/$sliceId/decks/$deckId/draw'),
+      body: json.encode({'exclude_from_draw': exclude}),
+      headers: {...ApiConfig.authHeaders, 'Content-Type': 'application/json'},
+    );
+    if (response.statusCode != 200) {
+      throw Exception(ApiError.parse(response.body, 'Не удалось изменить пометку колоды'));
+    }
+    return Slice.fromJson(json.decode(response.body) as Map<String, dynamic>);
+  }
+
   Future<void> deleteSlice(int id) async {
     final response = await _client.delete(
       Uri.parse('${ApiConfig.baseUrl}/api/slices/$id'),

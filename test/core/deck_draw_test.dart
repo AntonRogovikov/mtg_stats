@@ -106,6 +106,45 @@ void main() {
     });
   });
 
+  group('считалочка пропускает помеченные колоды', () {
+    test('семёрка — седьмая доступная, а не седьмая в полном списке', () {
+      // Первая колода помечена, дальше семь доступных.
+      final blocked = [true, false, false, false, false, false, false, false];
+      expect(indexFromSum(7, blocked), 7);
+      expect(blocked[indexFromSum(7, blocked)], isFalse);
+    });
+
+    test('помеченная колода не выпадает ни при какой сумме кубиков', () {
+      final blocked = [false, true, false, true, false, false, false];
+      for (var sum = kMinDiceSum; sum <= kMaxDiceSum; sum++) {
+        final index = indexFromSum(sum, blocked);
+        expect(index, inInclusiveRange(0, blocked.length - 1));
+        expect(blocked[index], isFalse, reason: 'сумма $sum');
+      }
+    });
+
+    test('автовыбор и ручной ввод сходятся: сумма ведёт к той же доступной колоде',
+        () {
+      final rnd = Random(11);
+      final blocked = [true, false, false, true, false, false];
+      final selectable = selectableIndexes(blocked);
+      for (final i in selectable) {
+        expect(blocked[i], isFalse);
+      }
+      for (var rank = 1; rank <= selectable.length; rank++) {
+        for (var attempt = 0; attempt < 20; attempt++) {
+          final sum = sumForPosition(rank, selectable.length, rnd);
+          expect(indexFromSum(sum, blocked), selectable[rank - 1]);
+        }
+      }
+    });
+
+    test('если доступных колод нет, сумма никого не выбирает', () {
+      expect(indexFromSum(7, [true, true]), -1);
+      expect(indexFromSum(7, []), -1);
+    });
+  });
+
   group('pickIndexByWeight (взвешенная рулетка)', () {
     test('пустой список весов → -1', () {
       expect(pickIndexByWeight([], Random(0)), -1);
@@ -126,10 +165,17 @@ void main() {
       }
     });
 
-    test('нулевые веса не роняют выбор и держатся в границах', () {
+    test('нулевые веса не выбирают колоду', () {
       final rnd = Random(4);
       for (var i = 0; i < 100; i++) {
-        expect(pickIndexByWeight([0.0, 0.0], rnd), inInclusiveRange(0, 1));
+        expect(pickIndexByWeight([0.0, 0.0], rnd), -1);
+      }
+    });
+
+    test('нулевой вес пропускается, пока есть положительный', () {
+      final rnd = Random(5);
+      for (var i = 0; i < 200; i++) {
+        expect(pickIndexByWeight([0.0, 1.0], rnd), 1);
       }
     });
 

@@ -11,6 +11,10 @@ class DeckCard extends StatelessWidget {
   final String? probabilityBadge;
   /// Если задано и [isDisabled], на карточке показывается подпись «Колода выбрана игроком …».
   final String? disabledSelectedByPlayerName;
+  /// Готовая подпись вместо текста про игрока. Например запрет выбора в разрезе.
+  final String? disabledCaption;
+  /// Оставить картинку у отключённой карточки: список помечает её, но не прячет.
+  final bool showImageWhenDisabled;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback? onMenuTap;
@@ -22,6 +26,8 @@ class DeckCard extends StatelessWidget {
     this.isDisabled = false,
     this.probabilityBadge,
     this.disabledSelectedByPlayerName,
+    this.disabledCaption,
+    this.showImageWhenDisabled = false,
     required this.onTap,
     required this.onLongPress,
     this.onMenuTap,
@@ -82,7 +88,7 @@ class DeckCard extends StatelessWidget {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            if (!isDisabled)
+                            if (!isDisabled || showImageWhenDisabled)
                               _DeckCardImage(
                                 avatarUrl: deck.avatarUrl,
                                 defaultAsset: _defaultImageAsset,
@@ -150,8 +156,9 @@ class DeckCard extends StatelessWidget {
                                 ),
                               ),
                             if (isDisabled &&
-                                (disabledSelectedByPlayerName?.isNotEmpty ??
-                                    false))
+                                ((disabledCaption?.isNotEmpty ?? false) ||
+                                    (disabledSelectedByPlayerName?.isNotEmpty ??
+                                        false)))
                               Positioned(
                                 left: 0,
                                 right: 0,
@@ -168,7 +175,9 @@ class DeckCard extends StatelessWidget {
                                     ),
                                   ),
                                   child: Text(
-                                    'Колода выбрана игроком ${disabledSelectedByPlayerName!}',
+                                    (disabledCaption?.isNotEmpty ?? false)
+                                        ? disabledCaption!
+                                        : 'Колода выбрана игроком ${disabledSelectedByPlayerName!}',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 10,

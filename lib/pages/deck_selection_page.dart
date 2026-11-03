@@ -10,6 +10,7 @@ import 'package:mtg_stats/models/user.dart';
 import 'package:mtg_stats/pages/deck_card_page.dart';
 import 'package:mtg_stats/pages/deck_picker_page.dart';
 import 'package:mtg_stats/providers/service_providers.dart';
+import 'package:mtg_stats/providers/slice_providers.dart';
 import 'package:mtg_stats/providers/stats_providers.dart';
 import 'package:mtg_stats/services/api_config.dart';
 
@@ -162,30 +163,27 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
     return 0;
   }
 
-  Deck? _pickDeckByHistoryWeight(List<Deck> availableDecks) {
-    if (availableDecks.isEmpty) return null;
-    final days = ref.read(deckRecencyDaysProvider).asData?.value ??
-        const <int, int>{};
-    final weights = availableDecks
-        .map((deck) => deckDrawWeight(_gamesCountForDeck(deck), days[deck.id]))
-        .toList(growable: false);
-    final index = pickIndexByWeight(weights, _secureRandom ?? _fastRandom);
-    return index < 0 ? null : availableDecks[index];
-  }
+  bool _isExcluded(int deckId) =>
+      ref.read(currentSliceExcludedDeckIdsProvider).contains(deckId);
 
-  /// Колоды, ещё не занятые другими игроками, в текущем порядке списка.
-  List<Deck> _availableDecksFor(User user) {
+  /// true — колоду пропускает считалочка: помечена или уже взята другим игроком.
+  List<bool> _blockedFlags(User user) {
     final takenDeckIds = _userDecks.entries
         .where((e) => e.key != user.id)
         .map((e) => e.value.id)
         .toSet();
-    return _deckOrder
-        .where((deck) => !takenDeckIds.contains(deck.id))
-        .toList(growable: false);
+    return [
+      for (final deck in _deckOrder)
+        takenDeckIds.contains(deck.id) || _isExcluded(deck.id),
+    ];
   }
 
   /// Назначает колоду игроку и продвигает очередь в авто-режиме.
   void _assignDeck(User user, Deck deck) {
+    if (_isExcluded(deck.id)) {
+      _showWarning('Колода «${deck.name}» не выбирается в этом разрезе');
+      return;
+    }
     setState(() {
       _userDecks[user.id] = deck;
       if (_isAutoMode) {
@@ -226,19 +224,32 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
   void _performFinalRollForDeck(User user) {
     Future.delayed(const Duration(milliseconds: 50), () {
       if (!mounted) return;
-      final available = _availableDecksFor(user);
-      if (available.isEmpty) {
+      final flags = _blockedFlags(user);
+      final selectable = selectableIndexes(flags);
+      if (selectable.isEmpty) {
         setState(() => _isRolling = false);
-        _showWarning(
-            'Все колоды уже выбраны. Освободите колоду или добавьте новую.');
+        final anySelectable = _deckOrder.any((deck) => !_isExcluded(deck.id));
+        _showWarning(anySelectable
+            ? 'Все колоды уже выбраны. Освободите колоду или добавьте новую.'
+            : 'Нет колод, которые можно выбрать в этом разрезе');
         return;
       }
-      // Сначала вес по истории игр выбирает колоду, затем под неё
-      // подгоняем сумму на кубиках (по той же считалочке, что и ручной ввод).
-      final deck = _pickDeckByHistoryWeight(available)!;
-      final k = available.indexOf(deck) + 1;
+      final days = ref.read(deckRecencyDaysProvider).asData?.value ??
+          const <int, int>{};
+      final weights = [
+        for (final i in selectable)
+          deckDrawWeight(
+              _gamesCountForDeck(_deckOrder[i]), days[_deckOrder[i].id]),
+      ];
       final rnd = _secureRandom ?? _fastRandom;
-      final sum = sumForPosition(k, available.length, rnd);
+      final picked = pickIndexByWeight(weights, rnd);
+      if (picked < 0) {
+        setState(() => _isRolling = false);
+        _showWarning('Нет колод, которые можно выбрать в этом разрезе');
+        return;
+      }
+      final deck = _deckOrder[selectable[picked]];
+      final sum = sumForPosition(picked + 1, selectable.length, rnd);
       final dice = diceForSum(sum, rnd);
       setState(() => _firstDiceValue = dice[0]);
       Future.delayed(const Duration(milliseconds: 30), () {
@@ -340,15 +351,15 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
   }
 
   void _processManualSum(User user, int sum) {
-    final available = _availableDecksFor(user);
-    if (available.isEmpty) {
-      _showWarning(
-          'Все колоды уже выбраны. Освободите колоду или добавьте новую.');
+    final index = indexFromSum(sum, _blockedFlags(user));
+    if (index < 0) {
+      final anySelectable = _deckOrder.any((deck) => !_isExcluded(deck.id));
+      _showWarning(anySelectable
+          ? 'Все колоды уже выбраны. Освободите колоду или добавьте новую.'
+          : 'Нет колод, которые можно выбрать в этом разрезе');
       return;
     }
-    // Введённая сумма напрямую определяет колоду по кругу — без учёта веса.
-    final k = positionFromSum(sum, available.length);
-    final deck = available[k - 1];
+    final deck = _deckOrder[index];
     final dice = diceForSum(sum, _secureRandom ?? _fastRandom);
     setState(() {
       _firstDiceValue = dice[0];
@@ -367,6 +378,13 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
       final name = userById[e.key]?.name;
       if (name != null) disabledDeckIdToPlayerName[e.value.id] = name;
     }
+    final captions = <int, String>{};
+    for (final deck in _deckOrder) {
+      if (_isExcluded(deck.id)) {
+        disabledDeckIds.add(deck.id);
+        captions[deck.id] = 'Не выбирается в этом разрезе';
+      }
+    }
 
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -376,6 +394,7 @@ class _DeckSelectionPageState extends ConsumerState<DeckSelectionPage> {
           decks: List.from(_deckOrder),
           disabledDeckIds: disabledDeckIds,
           disabledDeckIdToPlayerName: disabledDeckIdToPlayerName,
+          disabledCaptions: captions,
           selectedDeck: _userDecks[user.id],
           onDeckSelected: (deck) => _assignDeck(user, deck),
         ),

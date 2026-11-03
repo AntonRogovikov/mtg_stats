@@ -85,11 +85,44 @@ final currentSliceIdProvider = Provider<int>((ref) {
   return ref.watch(currentSliceProvider)?.id ?? 1;
 });
 
-/// Колоды, доступные в текущем разрезе: пул разреза или все колоды для глобального.
+/// Колоды, которые в текущем разрезе нельзя выбрать. В «Все разрезы» пусто.
+final currentSliceExcludedDeckIdsProvider = Provider<Set<int>>((ref) {
+  final slice = ref.watch(currentSliceProvider);
+  if (slice == null || slice.isAll) return const {};
+  final slices = ref.watch(slicesProvider).asData?.value;
+  if (slices != null) {
+    for (final candidate in slices) {
+      if (candidate.id == slice.id) return candidate.excludedDeckIds.toSet();
+    }
+  }
+  return slice.excludedDeckIds.toSet();
+});
+
+/// Колоды, доступные в текущем разрезе.
+/// В основном разрезе нет колод, которые уже входят в пул другого разреза.
+/// В «Все разрезы» — весь справочник.
 final slicePoolDecksProvider = FutureProvider<List<Deck>>((ref) async {
   final decks = await ref.watch(decksProvider.future);
   final slice = ref.watch(currentSliceProvider);
-  if (slice == null || slice.isDefault || slice.isAll) return decks;
-  final pool = slice.deckIds.toSet();
+  if (slice == null || slice.isAll) return decks;
+
+  final slices = await ref.watch(slicesProvider.future);
+  if (slice.isDefault) {
+    final taken = <int>{};
+    for (final other in slices) {
+      if (other.isDefault || other.isAll) continue;
+      taken.addAll(other.deckIds);
+    }
+    return decks.where((d) => !taken.contains(d.id)).toList();
+  }
+
+  Slice source = slice;
+  for (final candidate in slices) {
+    if (candidate.id == slice.id) {
+      source = candidate;
+      break;
+    }
+  }
+  final pool = source.deckIds.toSet();
   return decks.where((d) => pool.contains(d.id)).toList();
 });

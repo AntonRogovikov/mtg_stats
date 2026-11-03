@@ -191,7 +191,7 @@ class _SliceCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final color = slice.themeColor ?? AppTheme.appBarBackground;
     final poolLabel = slice.isDefault
-        ? 'Все колоды'
+        ? 'Колод: ${slice.deckIds.length}'
         : 'Колод в пуле: ${slice.deckIds.length}';
     return Card(
       margin: const EdgeInsets.only(bottom: 12),

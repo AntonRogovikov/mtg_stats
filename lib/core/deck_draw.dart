@@ -80,7 +80,9 @@ Map<int, int> daysSinceLastPlayedByDeck(List<Game> games) {
 int pickIndexByWeight(List<double> weights, Random rnd) {
   if (weights.isEmpty) return -1;
   final total = weights.fold<double>(0, (sum, w) => sum + w);
-  if (total <= 0) return rnd.nextInt(weights.length);
+  // Все нули — выбирать некого (например, все колоды помечены). Не подменяем
+  // это случайным индексом, иначе помеченная колода всё равно выпадет.
+  if (total <= 0) return -1;
 
   var threshold = rnd.nextDouble() * total;
   for (var i = 0; i < weights.length; i++) {
@@ -93,6 +95,28 @@ int pickIndexByWeight(List<double> weights, Random rnd) {
 /// Считалочка «по кругу»: сумма кубиков → позиция колоды (1..n) среди [n]
 /// доступных. Кратные [n] суммы аккуратно попадают в последнюю позицию.
 int positionFromSum(int sum, int n) => ((sum - 1) % n) + 1;
+
+/// Индексы колод, которые участвуют в считалочке. [blocked] — колоду пропускаем
+/// (пометка «не выбирать» или её уже взял другой игрок).
+List<int> selectableIndexes(List<bool> blocked) {
+  final out = <int>[];
+  for (var i = 0; i < blocked.length; i++) {
+    if (!blocked[i]) out.add(i);
+  }
+  return out;
+}
+
+/// Индекс колоды в полном списке по сумме кубиков.
+///
+/// Считалочка идёт только по колодам без [blocked]: семёрка — это седьмая
+/// доступная колода, а не седьмая строка полного списка. Если выбирать не из
+/// чего, возвращает -1.
+int indexFromSum(int sum, List<bool> blocked) {
+  final selectable = selectableIndexes(blocked);
+  if (selectable.isEmpty) return -1;
+  final k = positionFromSum(sum, selectable.length);
+  return selectable[k - 1];
+}
 
 /// Подбирает сумму в диапазоне [kMinDiceSum]..[kMaxDiceSum], которая по
 /// считалочке даёт позицию [k] при [n] колодах. Из всех подходящих сумм

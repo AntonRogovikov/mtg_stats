@@ -133,9 +133,7 @@ class SlicesManagePage extends ConsumerWidget {
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 subtitle: Text(
-                  s.isDefault
-                      ? 'Все колоды • Игр: ${s.gamesCount}'
-                      : 'Колод: ${s.deckIds.length} • Игр: ${s.gamesCount}',
+                  'Колод: ${s.deckIds.length} • Игр: ${s.gamesCount}',
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -187,6 +185,8 @@ class _SliceEditPageState extends ConsumerState<SliceEditPage> {
   late final TextEditingController _nameController;
   late String _color;
   late final Set<int> _selectedDeckIds;
+  late final Set<int> _excludedDeckIds;
+  int? _togglingDeckId;
   bool _saving = false;
 
   bool get _isEdit => widget.slice != null;
@@ -202,6 +202,7 @@ class _SliceEditPageState extends ConsumerState<SliceEditPage> {
     _nameController = TextEditingController(text: widget.slice?.name ?? '');
     _color = widget.slice?.color ?? '';
     _selectedDeckIds = {...?widget.slice?.deckIds};
+    _excludedDeckIds = {...?widget.slice?.excludedDeckIds};
   }
 
   @override
@@ -213,6 +214,50 @@ class _SliceEditPageState extends ConsumerState<SliceEditPage> {
   Color _paletteColor(String hex) {
     if (hex.isEmpty) return Colors.blueGrey[900]!;
     return Color(0xFF000000 | int.parse(hex.substring(1), radix: 16));
+  }
+
+  Future<void> _toggleExclude(int deckId, bool exclude) async {
+    final slice = widget.slice;
+    if (slice == null) return;
+    setState(() => _togglingDeckId = deckId);
+    try {
+      final updated = await ref
+          .read(sliceServiceProvider)
+          .setExcludeFromDraw(slice.id, deckId, exclude);
+      if (!mounted) return;
+      setState(() {
+        _excludedDeckIds
+          ..clear()
+          ..addAll(updated.excludedDeckIds);
+      });
+      ref.invalidate(slicesProvider);
+    } catch (e) {
+      _showError(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _togglingDeckId = null);
+    }
+  }
+
+  Widget _excludeSwitch(int deckId) {
+    final saved = widget.slice?.deckIds.contains(deckId) ?? false;
+    if (!saved) return const SizedBox.shrink();
+    return Tooltip(
+      message: 'Запретить выбор в этом разрезе: и кубик, и ручной ввод',
+      child: SizedBox(
+        width: 36,
+        height: 20,
+        child: FittedBox(
+          fit: BoxFit.contain,
+          child: Switch(
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            value: _excludedDeckIds.contains(deckId),
+            onChanged: _togglingDeckId == deckId
+                ? null
+                : (value) => _toggleExclude(deckId, value),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -376,12 +421,43 @@ class _SliceEditPageState extends ConsumerState<SliceEditPage> {
           ),
           const SizedBox(height: 16),
           if (_isDefault)
-            const Card(
+            Card(
               child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  'Пул колод основного разреза не ограничен: в нём всегда доступны все колоды, включая новые.',
-                  style: TextStyle(color: Colors.grey),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'В основном разрезе доступны все колоды, кроме тех, что входят в пул другого разреза. Новая колода появляется здесь, пока её не добавят в другой разрез. Переключатель «Не выбирать» запрещает и автовыбор, и ручной ввод.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    if (_isEdit) ...[
+                      const SizedBox(height: 12),
+                      decksAsync.when(
+                        loading: () => const LinearProgressIndicator(),
+                        error: (e, _) => Text('Не удалось загрузить колоды: $e'),
+                        data: (decks) {
+                          final pool = widget.slice!.deckIds.toSet();
+                          final sorted = decks
+                              .where((d) => pool.contains(d.id))
+                              .toList()
+                            ..sort((a, b) => a.name.compareTo(b.name));
+                          return Column(
+                            children: sorted
+                                .map((d) => ListTile(
+                                      dense: true,
+                                      visualDensity: VisualDensity.compact,
+                                      minTileHeight: 36,
+                                      contentPadding: EdgeInsets.zero,
+                                      title: Text(d.name),
+                                      trailing: _excludeSwitch(d.id),
+                                    ))
+                                .toList(),
+                          );
+                        },
+                      ),
+                    ],
+                  ],
                 ),
               ),
             )
@@ -428,7 +504,7 @@ class _SliceEditPageState extends ConsumerState<SliceEditPage> {
                             Expanded(
                               child: Text(
                                 'Колоды с играми (🔒) убрать из разреза нельзя. '
-                                'Добавлять новые колоды можно свободно.',
+                                'Их можно пометить «Не выбирать»: тогда их не возьмут ни кубик, ни ручной ввод.',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.orange.shade900,
@@ -458,13 +534,22 @@ class _SliceEditPageState extends ConsumerState<SliceEditPage> {
                                 isSelected && _lockedDeckIds.contains(d.id);
                             return CheckboxListTile(
                               dense: true,
+                              visualDensity: VisualDensity.compact,
                               contentPadding: EdgeInsets.zero,
                               controlAffinity: ListTileControlAffinity.leading,
                               title: Text(d.name),
-                              secondary: isLocked
-                                  ? Icon(Icons.lock_outline,
-                                      size: 18, color: Colors.orange.shade700)
-                                  : null,
+                              secondary: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _excludeSwitch(d.id),
+                                  if (isLocked) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(Icons.lock_outline,
+                                        size: 16,
+                                        color: Colors.orange.shade700),
+                                  ],
+                                ],
+                              ),
                               value: isSelected,
                               // Колоду с играми снять нельзя; добавлять — свободно.
                               onChanged: isLocked

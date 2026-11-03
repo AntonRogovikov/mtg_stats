@@ -33,6 +33,8 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
   Map<int, int> _daysSinceByDeckId = {};
   Map<int, double> _deckChancePercentById = {};
   String _searchQuery = '';
+  /// По умолчанию колоды с пометкой «не выбирать» в списке не показаны.
+  bool _showExcludedDecks = false;
 
   int _firstDiceValue = 1;
   int _secondDiceValue = 1;
@@ -50,11 +52,12 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
 
   final TextEditingController _searchController = TextEditingController();
 
-  List<Deck> get _filteredDecks {
-    if (_searchQuery.isEmpty) return decks;
-    return decks
-        .where((d) => d.name.toLowerCase().contains(_searchQuery))
-        .toList();
+  List<Deck> _visibleDecks(Set<int> excludedIds) {
+    return decks.where((deck) {
+      if (!_showExcludedDecks && excludedIds.contains(deck.id)) return false;
+      if (_searchQuery.isEmpty) return true;
+      return deck.name.toLowerCase().contains(_searchQuery);
+    }).toList();
   }
 
   @override
@@ -310,11 +313,27 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
         setState(() => _isRolling = false);
         return;
       }
-      // Сначала вес по истории игр выбирает колоду, затем под неё
-      // подгоняем сумму на кубиках (по той же считалочке, что и ручной ввод).
-      final index = _pickDeckIndexByWeight()!;
+      // Сначала вес по истории игр выбирает колоду среди доступных, затем под
+      // её позицию в этом же списке подгоняем сумму. Помеченные пропускаются.
+      final selectable = selectableIndexes(_blockedFlags());
+      if (selectable.isEmpty) {
+        setState(() => _isRolling = false);
+        _showErrorSnack('Нет колод, которые можно выбрать в этом разрезе');
+        return;
+      }
+      final weights = [
+        for (final i in selectable) _deckWeight(decks[i]),
+      ];
+      final picked =
+          pickIndexByWeight(weights, _secureRandom ?? _fastRandom);
+      if (picked < 0) {
+        setState(() => _isRolling = false);
+        _showErrorSnack('Нет колод, которые можно выбрать в этом разрезе');
+        return;
+      }
+      final index = selectable[picked];
       final rnd = _secureRandom ?? _fastRandom;
-      final sum = sumForPosition(index + 1, decks.length, rnd);
+      final sum = sumForPosition(picked + 1, selectable.length, rnd);
       final dice = diceForSum(sum, rnd);
       setState(() => _firstDiceValue = dice[0]);
       Future.delayed(Duration(milliseconds: 30), () {
@@ -328,8 +347,13 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
     });
   }
 
-  double _deckWeight(Deck deck) =>
-      deckDrawWeight(_gamesByDeckId[deck.id] ?? 0, _daysSinceByDeckId[deck.id]);
+  double _deckWeight(Deck deck) {
+    if (ref.read(currentSliceExcludedDeckIdsProvider).contains(deck.id)) {
+      return 0;
+    }
+    return deckDrawWeight(
+        _gamesByDeckId[deck.id] ?? 0, _daysSinceByDeckId[deck.id]);
+  }
 
   double _totalDeckWeight() {
     if (decks.isEmpty) return 0;
@@ -357,12 +381,10 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
     return '${chance.toStringAsFixed(1)}% · игр $gamesCount';
   }
 
-  int? _pickDeckIndexByWeight() {
-    if (decks.isEmpty) return null;
-    final weights =
-        decks.map((deck) => _deckWeight(deck)).toList(growable: false);
-    final index = pickIndexByWeight(weights, _secureRandom ?? _fastRandom);
-    return index < 0 ? null : index;
+  /// true — колода не участвует в считалочке этого разреза.
+  List<bool> _blockedFlags() {
+    final excluded = ref.read(currentSliceExcludedDeckIdsProvider);
+    return [for (final deck in decks) excluded.contains(deck.id)];
   }
 
   void _manualSumInput() {
@@ -453,13 +475,17 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
     final sum = int.tryParse(text);
     if (sum == null || sum < 2 || sum > 40) return;
     if (decks.isEmpty) return;
-    // Введённая сумма напрямую определяет колоду по кругу — без учёта веса.
-    final k = positionFromSum(sum, decks.length);
+    // Сумма считает только колоды без пометки «не выбирать».
+    final index = indexFromSum(sum, _blockedFlags());
+    if (index < 0) {
+      _showErrorSnack('Нет колод, которые можно выбрать в этом разрезе');
+      return;
+    }
     final dice = diceForSum(sum, _secureRandom ?? _fastRandom);
     setState(() {
       _firstDiceValue = dice[0];
       _secondDiceValue = dice[1];
-      _selectedDeckIndex = k - 1;
+      _selectedDeckIndex = index;
     });
   }
 
@@ -469,10 +495,10 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
     final statsAsync = ref.watch(statsDataProvider);
     final recencyAsync = ref.watch(deckRecencyDaysProvider);
     final currentSlice = ref.watch(currentSliceProvider);
-    // Создание колод — только в глобальном разрезе: новая колода не попала бы
-    // в пул текущего разреза и «исчезла» бы из списка сразу после создания.
+    // Плюс только в общем каталоге («Все разрезы»). Внутри любого разреза,
+    // включая Основной, колоду не создаём.
     final canCreateDecks =
-        ApiConfig.isAdmin && (currentSlice == null || currentSlice.isDefault);
+        ApiConfig.isAdmin && (currentSlice == null || currentSlice.isAll);
     return Scaffold(
       appBar: AppBar(
         title: Text('Колоды', style: AppTheme.appBarTitle),
@@ -523,31 +549,38 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
           if (recencyData != null && _daysSinceByDeckId.isEmpty) {
             _syncRecencyFromProvider(recencyData);
           }
-          final filteredDecks = _filteredDecks;
+          final excludedIds =
+              ref.watch(currentSliceExcludedDeckIdsProvider);
+          final visibleDecks = _visibleDecks(excludedIds);
+          final hiddenExcluded = decks.any((d) => excludedIds.contains(d.id));
 
           return Column(
             children: [
               if (_isDiceSectionVisible) _buildDiceSection(),
-              _buildDecksHeader(filteredDecks),
+              _buildDecksHeader(visibleDecks, showExcludedToggle: hiddenExcluded),
               _buildSearchField(),
               if (decks.isEmpty)
                 Expanded(
                   child: EmptyStateView(
                     icon: Icons.import_contacts,
-                    title: ApiConfig.isAdmin
+                    title: canCreateDecks
                         ? 'Нет колод. Нажмите + чтобы добавить'
                         : 'Нет колод',
                   ),
                 )
-              else if (filteredDecks.isEmpty)
-                const Expanded(
+              else if (visibleDecks.isEmpty)
+                Expanded(
                   child: EmptyStateView(
-                    icon: Icons.search_off,
-                    title: 'Ничего не найдено',
+                    icon: _searchQuery.isEmpty
+                        ? Icons.visibility_off
+                        : Icons.search_off,
+                    title: _searchQuery.isEmpty
+                        ? 'Помеченные колоды скрыты'
+                        : 'Ничего не найдено',
                   ),
                 )
               else
-                _buildDecksGrid(filteredDecks),
+                _buildDecksGrid(visibleDecks),
               if (_isDiceSectionVisible) _buildSelectionInfo(),
             ],
           );
@@ -592,28 +625,57 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
     );
   }
 
-  Widget _buildDecksHeader(List<Deck> filteredDecks) {
-    final filteredCount = filteredDecks.length;
+  Widget _buildDecksHeader(List<Deck> visibleDecks,
+      {required bool showExcludedToggle}) {
+    final visibleCount = visibleDecks.length;
     final isSearching = _searchQuery.isNotEmpty;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Colors.grey[300]!, width: 1)),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            isSearching
-                ? 'Найдено: $filteredCount'
-                : 'Всего колод: ${decks.length}',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.blueGrey[900],
+          Expanded(
+            child: Text(
+              isSearching ? 'Найдено: $visibleCount' : 'Всего колод: $visibleCount',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.blueGrey[900],
+              ),
             ),
           ),
+          if (showExcludedToggle) ...[
+            Tooltip(
+              message: 'Колоды с пометкой «не выбирать»',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Показывать все',
+                    style: TextStyle(fontSize: 12, color: Colors.blueGrey[700]),
+                  ),
+                  const SizedBox(width: 2),
+                  SizedBox(
+                    width: 36,
+                    height: 20,
+                    child: FittedBox(
+                      fit: BoxFit.contain,
+                      child: Switch(
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        value: _showExcludedDecks,
+                        onChanged: (value) =>
+                            setState(() => _showExcludedDecks = value),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           ElevatedButton.icon(
             onPressed:
                 (_secureInitialized && !_isRolling) ? _shuffleDecks : null,
@@ -783,6 +845,7 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
   }
 
   Widget _buildDecksGrid(List<Deck> filteredDecks) {
+    final excludedIds = ref.watch(currentSliceExcludedDeckIdsProvider);
     return Expanded(
       child: RefreshIndicator(
         onRefresh: _refreshDecks,
@@ -829,15 +892,26 @@ class _DeckListPageState extends ConsumerState<DeckListPage> {
               itemCount: filteredDecks.length,
               itemBuilder: (context, index) {
                 final deck = filteredDecks[index];
-                final isSelected = _selectedDeckIndex != null &&
+                final isExcluded = excludedIds.contains(deck.id);
+                final isSelected = !isExcluded &&
+                    _selectedDeckIndex != null &&
                     _selectedDeckIndex! < decks.length &&
                     decks[_selectedDeckIndex!].id == deck.id;
                 return DeckCard(
                   key: ValueKey<int>(deck.id),
                   deck: deck,
                   isSelected: isSelected,
+                  isDisabled: isExcluded,
+                  showImageWhenDisabled: isExcluded,
+                  disabledCaption:
+                      isExcluded ? 'Не выбирается' : null,
                   probabilityBadge: _deckProbabilityBadge(deck),
                   onTap: () {
+                    if (isExcluded) {
+                      _showErrorSnack(
+                          'Колода «${deck.name}» не выбирается в этом разрезе');
+                      return;
+                    }
                     setState(() {
                       _selectedDeckIndex =
                           decks.indexWhere((d) => d.id == deck.id);

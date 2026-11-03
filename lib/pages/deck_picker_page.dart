@@ -12,6 +12,8 @@ class DeckPickerPage extends StatefulWidget {
   final Set<int> disabledDeckIds;
   /// Для отключённых колод: id колоды → имя игрока, который её выбрал.
   final Map<int, String>? disabledDeckIdToPlayerName;
+  /// Подпись вместо «выбрана игроком», например запрет выбора в разрезе.
+  final Map<int, String>? disabledCaptions;
   final Deck? selectedDeck;
   final void Function(Deck) onDeckSelected;
 
@@ -22,6 +24,7 @@ class DeckPickerPage extends StatefulWidget {
     required this.decks,
     this.disabledDeckIds = const {},
     this.disabledDeckIdToPlayerName,
+    this.disabledCaptions,
     required this.selectedDeck,
     required this.onDeckSelected,
   });
@@ -110,6 +113,7 @@ class _DeckPickerPageState extends State<DeckPickerPage> {
                             isSelected: isSelected,
                             isDisabled: isDisabled,
                             disabledSelectedByPlayerName: disabledLabel,
+                            disabledCaption: widget.disabledCaptions?[deck.id],
                             onTap: isDisabled
                                 ? () {}
                                 : () {
